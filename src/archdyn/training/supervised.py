@@ -19,15 +19,29 @@ from archdyn.reproducibility import resolve_device, seed_everything
 
 
 def run_supervised_experiment(config: RunConfig) -> dict:
+    _status("Building transforms")
     train_transform, eval_transform = build_supervised_transforms(config)
     seed = config.seed
+    _status(f"Seeding run with seed={seed}")
     seed_everything(seed)
     device = resolve_device(config.training.device)
+    _status(f"Using device={device}")
     run_directory = prepare_run_dir(config, seed)
+    _status(f"Preparing output directory: {run_directory}")
     write_config_snapshot(config, run_directory / "config.snapshot.yaml")
 
+    _status("Building dataloaders")
     loaders = build_supervised_loaders(config, train_transform, eval_transform)
+    _status(
+        "Dataloaders ready: "
+        f"train_steps={len(loaders['train'])} val_steps={len(loaders['val'])} test_steps={len(loaders['test'])}"
+    )
+    _status(f"Building model: family={config.model.family} name={config.model.name}")
     model = build_model(config.model).to(device)
+    _status(
+        f"Building optimizer and scheduler: optimizer={config.optimizer.name} "
+        f"scheduler={config.scheduler.name}"
+    )
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.optimizer.lr, weight_decay=config.optimizer.weight_decay)
     scheduler = build_scheduler(config, optimizer)
     criterion = nn.CrossEntropyLoss()
@@ -36,6 +50,7 @@ def run_supervised_experiment(config: RunConfig) -> dict:
     best_val_accuracy = -1.0
     train_history = []
     val_history = []
+    _status(f"Starting training loop for {config.training.epochs} epochs")
     epoch_iterator = progress(
         range(1, config.training.epochs + 1),
         desc=f"{config.experiment_name} seed={seed}",
@@ -51,22 +66,33 @@ def run_supervised_experiment(config: RunConfig) -> dict:
         if val_accuracy > best_val_accuracy:
             best_val_accuracy = val_accuracy
             best_state = copy.deepcopy(model.state_dict())
+            _status(f"New best checkpoint at epoch={epoch} val_accuracy={val_accuracy:.4f}")
         if hasattr(epoch_iterator, "set_postfix"):
             epoch_iterator.set_postfix(train_loss=f"{train_loss:.4f}", val_acc=f"{val_accuracy:.3f}")
+        print(
+            f"[supervised] Epoch {epoch}/{config.training.epochs}: "
+            f"train_loss={train_loss:.4f} train_acc={train_accuracy:.4f} "
+            f"val_loss={val_loss:.4f} val_acc={val_accuracy:.4f}",
+            flush=True,
+        )
 
     if best_state is not None:
         model.load_state_dict(best_state)
         if config.outputs.save_checkpoints:
+            _status("Saving best checkpoint")
             torch.save(best_state, run_directory / "checkpoint_best.pt")
 
+    _status("Writing training history")
     pd.DataFrame(train_history).to_csv(run_directory / "train_history.csv", index=False)
     pd.DataFrame(val_history).to_csv(run_directory / "val_history.csv", index=False)
 
+    _status("Evaluating best model on test split")
     _, _, test_labels, test_predictions = evaluate_classifier(model, loaders["test"], criterion, device)
     metrics = classification_metrics(test_labels, test_predictions)
     metrics["seed"] = seed
     metrics["best_val_accuracy"] = best_val_accuracy
 
+    _status("Writing final metrics and artifacts")
     save_confusion_matrix(test_labels, test_predictions, run_directory / "confusion_matrix.csv")
     write_json(metrics, run_directory / "test_metrics.json")
     if config.outputs.save_predictions:
@@ -74,6 +100,10 @@ def run_supervised_experiment(config: RunConfig) -> dict:
             run_directory / "predictions.csv",
             index=False,
         )
+    _status(
+        f"Run complete: accuracy={metrics['accuracy']:.4f} macro_f1={metrics['macro_f1']:.4f} "
+        f"best_val_accuracy={best_val_accuracy:.4f}"
+    )
     return metrics
 
 
@@ -157,3 +187,7 @@ def rand_bbox(size, lam: float) -> tuple[int, int, int, int]:
     bbx2 = np.clip(cx + cut_w // 2, 0, width)
     bby2 = np.clip(cy + cut_h // 2, 0, height)
     return int(bbx1), int(bby1), int(bbx2), int(bby2)
+
+
+def _status(message: str) -> None:
+    print(f"[supervised] {message}", flush=True)

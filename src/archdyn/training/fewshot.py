@@ -19,29 +19,42 @@ from archdyn.reproducibility import resolve_device, seed_everything
 
 
 def run_fewshot_experiment(config: RunConfig) -> dict:
+    _status("Building transforms")
     train_transform, eval_transform = build_supervised_transforms(config)
     seed = config.seed
+    _status(f"Seeding run with seed={seed}")
     seed_everything(seed)
     device = resolve_device(config.training.device)
+    _status(f"Using device={device}")
     run_directory = prepare_run_dir(config, seed)
+    _status(f"Preparing output directory: {run_directory}")
     write_config_snapshot(config, run_directory / "config.snapshot.yaml")
 
+    _status("Building datasets")
     train_dataset = build_dataset(config, config.dataset.train_split, train_transform)
     val_dataset = build_dataset(_without_subset(config), config.dataset.val_split, eval_transform)
     test_dataset = build_dataset(_without_subset(config), config.dataset.test_split, eval_transform)
+    _status(
+        f"Datasets ready: train={len(train_dataset)} val={len(val_dataset)} test={len(test_dataset)} "
+        f"episodes(train/val/test)={config.fewshot.train_episodes}/{config.fewshot.val_episodes}/{config.fewshot.test_episodes}"
+    )
 
+    _status("Building episode samplers")
     train_sampler = EpisodeSampler(train_dataset, config.fewshot, seed)
     val_sampler = EpisodeSampler(val_dataset, config.fewshot, seed + 1)
     test_sampler = EpisodeSampler(test_dataset, config.fewshot, seed + 2)
 
+    _status(f"Building backbone and prototypical network: name={config.model.name}")
     backbone = build_model(config.model)
     model = PrototypicalNetwork(backbone).to(device)
+    _status(f"Building optimizer: {config.optimizer.name}")
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.optimizer.lr, weight_decay=config.optimizer.weight_decay)
 
     best_state = None
     best_val_accuracy = -1.0
     train_rows = []
     val_rows = []
+    _status(f"Starting few-shot training loop for {config.training.epochs} epochs")
     epoch_iterator = progress(
         range(1, config.training.epochs + 1),
         desc=f"{config.experiment_name} seed={seed}",
@@ -75,14 +88,23 @@ def run_fewshot_experiment(config: RunConfig) -> dict:
         if val_accuracy > best_val_accuracy:
             best_val_accuracy = val_accuracy
             best_state = copy.deepcopy(model.state_dict())
+            _status(f"New best checkpoint at epoch={epoch} val_accuracy={val_accuracy:.4f}")
         if hasattr(epoch_iterator, "set_postfix"):
             epoch_iterator.set_postfix(train_loss=f"{train_loss:.4f}", val_acc=f"{val_accuracy:.3f}")
+        print(
+            f"[fewshot] Epoch {epoch}/{config.training.epochs}: "
+            f"train_loss={train_loss:.4f} train_acc={train_accuracy:.4f} "
+            f"val_loss={val_loss:.4f} val_acc={val_accuracy:.4f}",
+            flush=True,
+        )
 
     if best_state is not None:
         model.load_state_dict(best_state)
         if config.outputs.save_checkpoints:
+            _status("Saving best checkpoint")
             torch.save(best_state, run_directory / "checkpoint_best.pt")
 
+    _status("Evaluating best model on test episodes")
     test_loss, test_accuracy = run_episode_epoch(
         model,
         test_sampler,
@@ -94,6 +116,7 @@ def run_fewshot_experiment(config: RunConfig) -> dict:
         total_epochs=config.training.epochs,
         seed=seed,
     )
+    _status("Writing training history and final metrics")
     pd.DataFrame(train_rows).to_csv(run_directory / "train_history.csv", index=False)
     pd.DataFrame(val_rows).to_csv(run_directory / "val_history.csv", index=False)
     metrics = {
@@ -103,6 +126,10 @@ def run_fewshot_experiment(config: RunConfig) -> dict:
         "accuracy": test_accuracy,
     }
     write_json(metrics, run_directory / "test_metrics.json")
+    _status(
+        f"Run complete: accuracy={test_accuracy:.4f} test_loss={test_loss:.4f} "
+        f"best_val_accuracy={best_val_accuracy:.4f}"
+    )
     return metrics
 
 
@@ -143,3 +170,7 @@ def _without_subset(config: RunConfig) -> RunConfig:
     clone = copy.deepcopy(config)
     clone.subset.enabled = False
     return clone
+
+
+def _status(message: str) -> None:
+    print(f"[fewshot] {message}", flush=True)
