@@ -61,6 +61,8 @@ class TrainingConfig:
     batch_size: int = 64
     num_workers: int = 4
     device: str = "auto"
+    deterministic: bool = False
+    mixed_precision: bool = True
     log_every: int = 20
 
 

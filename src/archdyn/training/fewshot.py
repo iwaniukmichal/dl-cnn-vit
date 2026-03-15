@@ -23,9 +23,10 @@ def run_fewshot_experiment(config: RunConfig) -> dict:
     train_transform, eval_transform = build_supervised_transforms(config)
     seed = config.seed
     _status(f"Seeding run with seed={seed}")
-    seed_everything(seed)
+    seed_everything(seed, deterministic=config.training.deterministic)
     device = resolve_device(config.training.device)
     _status(f"Using device={device}")
+    amp_enabled = device.type == "cuda" and config.training.mixed_precision
     run_directory = prepare_run_dir(config, seed)
     _status(f"Preparing output directory: {run_directory}")
     write_config_snapshot(config, run_directory / "config.snapshot.yaml")
@@ -49,6 +50,7 @@ def run_fewshot_experiment(config: RunConfig) -> dict:
     model = PrototypicalNetwork(backbone).to(device)
     _status(f"Building optimizer: {config.optimizer.name}")
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.optimizer.lr, weight_decay=config.optimizer.weight_decay)
+    scaler = _build_grad_scaler(device, amp_enabled)
 
     best_state = None
     best_val_accuracy = -1.0
@@ -67,6 +69,8 @@ def run_fewshot_experiment(config: RunConfig) -> dict:
             config.fewshot.train_episodes,
             optimizer,
             device,
+            scaler,
+            amp_enabled,
             train=True,
             epoch=epoch,
             total_epochs=config.training.epochs,
@@ -78,6 +82,8 @@ def run_fewshot_experiment(config: RunConfig) -> dict:
             config.fewshot.val_episodes,
             optimizer,
             device,
+            scaler,
+            amp_enabled,
             train=False,
             epoch=epoch,
             total_epochs=config.training.epochs,
@@ -111,6 +117,8 @@ def run_fewshot_experiment(config: RunConfig) -> dict:
         config.fewshot.test_episodes,
         optimizer,
         device,
+        scaler,
+        amp_enabled,
         train=False,
         epoch=config.training.epochs,
         total_epochs=config.training.epochs,
@@ -133,7 +141,19 @@ def run_fewshot_experiment(config: RunConfig) -> dict:
     return metrics
 
 
-def run_episode_epoch(model, sampler: EpisodeSampler, num_episodes: int, optimizer, device: torch.device, train: bool, epoch: int, total_epochs: int, seed: int) -> tuple[float, float]:
+def run_episode_epoch(
+    model,
+    sampler: EpisodeSampler,
+    num_episodes: int,
+    optimizer,
+    device: torch.device,
+    scaler,
+    amp_enabled: bool,
+    train: bool,
+    epoch: int,
+    total_epochs: int,
+    seed: int,
+) -> tuple[float, float]:
     losses = []
     accuracies = []
     if train:
@@ -147,18 +167,24 @@ def run_episode_epoch(model, sampler: EpisodeSampler, num_episodes: int, optimiz
     )
     for _ in episode_iterator:
         episode = sampler.sample_episode()
-        support_images = episode["support_images"].to(device)
-        support_labels = episode["support_labels"].to(device)
-        query_images = episode["query_images"].to(device)
-        query_labels = episode["query_labels"].to(device)
+        support_images = episode["support_images"].to(device, non_blocking=device.type == "cuda")
+        support_labels = episode["support_labels"].to(device, non_blocking=device.type == "cuda")
+        query_images = episode["query_images"].to(device, non_blocking=device.type == "cuda")
+        query_labels = episode["query_labels"].to(device, non_blocking=device.type == "cuda")
         if train:
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
         with torch.set_grad_enabled(train):
-            logits = model(support_images, support_labels, query_images)
-            loss = prototypical_loss(logits, query_labels)
+            with torch.autocast(device_type=device.type, enabled=amp_enabled):
+                logits = model(support_images, support_labels, query_images)
+                loss = prototypical_loss(logits, query_labels)
             if train:
-                loss.backward()
-                optimizer.step()
+                if scaler.is_enabled():
+                    scaler.scale(loss).backward()
+                    scaler.step(optimizer)
+                    scaler.update()
+                else:
+                    loss.backward()
+                    optimizer.step()
         losses.append(float(loss.item()))
         accuracies.append(accuracy_from_logits(logits.detach(), query_labels))
         if hasattr(episode_iterator, "set_postfix"):
@@ -170,6 +196,12 @@ def _without_subset(config: RunConfig) -> RunConfig:
     clone = copy.deepcopy(config)
     clone.subset.enabled = False
     return clone
+
+
+def _build_grad_scaler(device: torch.device, amp_enabled: bool):
+    if hasattr(torch, "amp") and hasattr(torch.amp, "GradScaler"):
+        return torch.amp.GradScaler(device.type, enabled=amp_enabled)
+    return torch.cuda.amp.GradScaler(enabled=amp_enabled and device.type == "cuda")
 
 
 def _status(message: str) -> None:

@@ -25,14 +25,14 @@ def main() -> None:
     _, eval_transform = build_supervised_transforms(config)
     device = resolve_device(config.training.device)
     seed = config.seed
-    seed_everything(seed)
+    seed_everything(seed, deterministic=config.training.deterministic)
     run_directory = prepare_run_dir(config, seed)
     write_config_snapshot(config, run_directory / "config.snapshot.yaml")
 
     eval_dataset = build_dataset(_without_subset(config), config.ensemble.eval_split, eval_transform)
-    eval_loader = build_dataloader(eval_dataset, config.training.batch_size, config.training.num_workers, False)
+    eval_loader = build_dataloader(eval_dataset, config.training.batch_size, config.training.num_workers, False, device)
     meta_dataset = build_dataset(_without_subset(config), config.ensemble.meta_split, eval_transform)
-    meta_loader = build_dataloader(meta_dataset, config.training.batch_size, config.training.num_workers, False)
+    meta_loader = build_dataloader(meta_dataset, config.training.batch_size, config.training.num_workers, False, device)
 
     cnn_config = copy.deepcopy(config)
     cnn_config.model.family = "pretrained_cnn"

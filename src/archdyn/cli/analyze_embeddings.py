@@ -24,12 +24,12 @@ def main() -> None:
     _, eval_transform = build_supervised_transforms(config)
     device = resolve_device(config.training.device)
     seed = config.seed
-    seed_everything(seed)
+    seed_everything(seed, deterministic=config.training.deterministic)
     run_directory = prepare_run_dir(config, seed)
     write_config_snapshot(config, run_directory / "config.snapshot.yaml")
     split = config.dataset.test_split if config.analysis.split == "test" else config.analysis.split
     dataset = build_dataset(_config_without_subset(config), split, eval_transform)
-    dataloader = build_dataloader(dataset, config.training.batch_size, config.training.num_workers, False)
+    dataloader = build_dataloader(dataset, config.training.batch_size, config.training.num_workers, False, device)
     model = PrototypicalNetwork(build_model(config.model)).to(device)
     checkpoint_path = Path(config.analysis.checkpoint_dir) / f"seed_{seed}" / "checkpoint_best.pt"
     model.load_state_dict(torch.load(checkpoint_path, map_location=device))

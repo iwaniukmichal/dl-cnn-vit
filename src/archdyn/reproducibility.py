@@ -14,6 +14,9 @@ def seed_everything(seed: int, deterministic: bool = True) -> None:
     if deterministic:
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
+    else:
+        torch.backends.cudnn.deterministic = False
+        torch.backends.cudnn.benchmark = torch.cuda.is_available()
 
 
 def resolve_device(device: str) -> torch.device:

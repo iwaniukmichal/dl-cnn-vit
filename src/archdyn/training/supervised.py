@@ -23,15 +23,17 @@ def run_supervised_experiment(config: RunConfig) -> dict:
     train_transform, eval_transform = build_supervised_transforms(config)
     seed = config.seed
     _status(f"Seeding run with seed={seed}")
-    seed_everything(seed)
+    seed_everything(seed, deterministic=config.training.deterministic)
     device = resolve_device(config.training.device)
     _status(f"Using device={device}")
+    amp_enabled = device.type == "cuda" and config.training.mixed_precision
+    _status(f"CUDA mixed precision={'enabled' if amp_enabled else 'disabled'}")
     run_directory = prepare_run_dir(config, seed)
     _status(f"Preparing output directory: {run_directory}")
     write_config_snapshot(config, run_directory / "config.snapshot.yaml")
 
     _status("Building dataloaders")
-    loaders = build_supervised_loaders(config, train_transform, eval_transform)
+    loaders = build_supervised_loaders(config, train_transform, eval_transform, device)
     _status(
         "Dataloaders ready: "
         f"train_steps={len(loaders['train'])} val_steps={len(loaders['val'])} test_steps={len(loaders['test'])}"
@@ -45,6 +47,7 @@ def run_supervised_experiment(config: RunConfig) -> dict:
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.optimizer.lr, weight_decay=config.optimizer.weight_decay)
     scheduler = build_scheduler(config, optimizer)
     criterion = nn.CrossEntropyLoss()
+    scaler = _build_grad_scaler(device, amp_enabled)
 
     best_state = None
     best_val_accuracy = -1.0
@@ -57,8 +60,19 @@ def run_supervised_experiment(config: RunConfig) -> dict:
         leave=False,
     )
     for epoch in epoch_iterator:
-        train_loss, train_accuracy = train_one_epoch(model, loaders["train"], optimizer, criterion, device, config, epoch, seed)
-        val_loss, val_accuracy, _, _ = evaluate_classifier(model, loaders["val"], criterion, device)
+        train_loss, train_accuracy = train_one_epoch(
+            model,
+            loaders["train"],
+            optimizer,
+            criterion,
+            device,
+            config,
+            scaler,
+            amp_enabled,
+            epoch,
+            seed,
+        )
+        val_loss, val_accuracy, _, _ = evaluate_classifier(model, loaders["val"], criterion, device, amp_enabled)
         train_history.append({"epoch": epoch, "loss": train_loss, "accuracy": train_accuracy})
         val_history.append({"epoch": epoch, "loss": val_loss, "accuracy": val_accuracy})
         if scheduler is not None:
@@ -87,7 +101,7 @@ def run_supervised_experiment(config: RunConfig) -> dict:
     pd.DataFrame(val_history).to_csv(run_directory / "val_history.csv", index=False)
 
     _status("Evaluating best model on test split")
-    _, _, test_labels, test_predictions = evaluate_classifier(model, loaders["test"], criterion, device)
+    _, _, test_labels, test_predictions = evaluate_classifier(model, loaders["test"], criterion, device, amp_enabled)
     metrics = classification_metrics(test_labels, test_predictions)
     metrics["seed"] = seed
     metrics["best_val_accuracy"] = best_val_accuracy
@@ -114,7 +128,18 @@ def build_scheduler(config: RunConfig, optimizer):
     return None
 
 
-def train_one_epoch(model, dataloader, optimizer, criterion, device: torch.device, config: RunConfig, epoch: int, seed: int) -> tuple[float, float]:
+def train_one_epoch(
+    model,
+    dataloader,
+    optimizer,
+    criterion,
+    device: torch.device,
+    config: RunConfig,
+    scaler,
+    amp_enabled: bool,
+    epoch: int,
+    seed: int,
+) -> tuple[float, float]:
     model.train()
     losses = []
     accuracies = []
@@ -123,19 +148,26 @@ def train_one_epoch(model, dataloader, optimizer, criterion, device: torch.devic
         desc=f"train epoch={epoch}/{config.training.epochs} seed={seed}",
         leave=False,
     )
+    use_async_transfer = device.type == "cuda"
     for images, labels in batch_iterator:
-        images = images.to(device)
-        labels = labels.to(device)
-        optimizer.zero_grad()
-        logits = model(images)
-        if config.augmentation.name in {"advanced", "combined"}:
-            images, labels_a, labels_b, lam = apply_cutmix(images, labels, alpha=config.augmentation.cutmix_alpha)
-            logits = model(images)
-            loss = lam * criterion(logits, labels_a) + (1 - lam) * criterion(logits, labels_b)
+        images = images.to(device, non_blocking=use_async_transfer)
+        labels = labels.to(device, non_blocking=use_async_transfer)
+        optimizer.zero_grad(set_to_none=True)
+        with torch.autocast(device_type=device.type, enabled=amp_enabled):
+            if config.augmentation.name in {"advanced", "combined"}:
+                images, labels_a, labels_b, lam = apply_cutmix(images, labels, alpha=config.augmentation.cutmix_alpha)
+                logits = model(images)
+                loss = lam * criterion(logits, labels_a) + (1 - lam) * criterion(logits, labels_b)
+            else:
+                logits = model(images)
+                loss = criterion(logits, labels)
+        if scaler.is_enabled():
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
         else:
-            loss = criterion(logits, labels)
-        loss.backward()
-        optimizer.step()
+            loss.backward()
+            optimizer.step()
         losses.append(float(loss.item()))
         accuracies.append(accuracy_from_logits(logits.detach(), labels))
         if hasattr(batch_iterator, "set_postfix"):
@@ -143,17 +175,25 @@ def train_one_epoch(model, dataloader, optimizer, criterion, device: torch.devic
     return float(np.mean(losses)), float(np.mean(accuracies))
 
 
-def evaluate_classifier(model, dataloader, criterion, device: torch.device) -> tuple[float, float, np.ndarray, np.ndarray]:
+def evaluate_classifier(
+    model,
+    dataloader,
+    criterion,
+    device: torch.device,
+    amp_enabled: bool,
+) -> tuple[float, float, np.ndarray, np.ndarray]:
     model.eval()
     losses = []
     all_labels = []
     all_predictions = []
-    with torch.no_grad():
+    use_async_transfer = device.type == "cuda"
+    with torch.inference_mode():
         for images, labels in dataloader:
-            images = images.to(device)
-            labels = labels.to(device)
-            logits = model(images)
-            loss = criterion(logits, labels)
+            images = images.to(device, non_blocking=use_async_transfer)
+            labels = labels.to(device, non_blocking=use_async_transfer)
+            with torch.autocast(device_type=device.type, enabled=amp_enabled):
+                logits = model(images)
+                loss = criterion(logits, labels)
             losses.append(float(loss.item()))
             all_labels.append(labels.cpu().numpy())
             all_predictions.append(logits.argmax(dim=1).cpu().numpy())
@@ -187,6 +227,12 @@ def rand_bbox(size, lam: float) -> tuple[int, int, int, int]:
     bbx2 = np.clip(cx + cut_w // 2, 0, width)
     bby2 = np.clip(cy + cut_h // 2, 0, height)
     return int(bbx1), int(bby1), int(bbx2), int(bby2)
+
+
+def _build_grad_scaler(device: torch.device, amp_enabled: bool):
+    if hasattr(torch, "amp") and hasattr(torch.amp, "GradScaler"):
+        return torch.amp.GradScaler(device.type, enabled=amp_enabled)
+    return torch.cuda.amp.GradScaler(enabled=amp_enabled and device.type == "cuda")
 
 
 def _status(message: str) -> None:
