@@ -9,7 +9,7 @@ import yaml
 
 @dataclass(slots=True)
 class PathsConfig:
-    data_root: str = "./../../input/datasets/mengcius/cinic10" #"data/cinic10"
+    data_root: str = "data/cinic10"
     output_root: str = "outputs"
     subset_root: str = "data/manifests"
 
