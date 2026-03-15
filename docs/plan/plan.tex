@@ -1,0 +1,278 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[margin=2.5cm]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{float}
+\usepackage{enumitem}
+\usepackage{longtable}
+
+\hypersetup{colorlinks=true, linkcolor=blue!70!black, urlcolor=blue!70!black}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt}
+
+\title{\textbf{Architecture-Specific Training Dynamics: CNNs vs Vision Transformers on CINIC-10}}
+\author{Bart\l{}omiej Borycki, Micha\l{} Iwaniuk}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\textbf{Disclaimer:} \textit{This document outlines our preliminary project plan. The proposed methodology and scope are subject to modifications as the project progresses, particularly regarding the specifics and feasibility of Phase 4.}
+
+\section{Project Overview}
+
+In this project, we investigate how two different neural network architectures -- \textbf{ResNet-18} (Convolutional Neural Network) and \textbf{DeiT-Tiny} (Vision Transformer) -- respond differently to changes in training configuration, regularization techniques, and data augmentation strategies. We also include a simple custom CNN trained from scratch as a baseline in the first phase of our work.
+
+Our experimental pipeline is organized into four phases. The first three phases follow a standard approach: we start by comparing the baseline performance of both architectures, then search for the best hyperparameters for each one, and finally evaluate how different augmentation strategies affect their performance. We acknowledge that this sequential approach may not completely isolate the effect of each factor, and a more comprehensive factorial design would be computationally expensive.
+
+In the fourth phase, we shift our focus to few-shot learning using Prototypical Networks. Here, we explore how different augmentation strategies help when we have very little training data available. We will perform a quantitative analysis of the learned embedding spaces using clustering quality metrics (such as silhouette score, Davies-Bouldin index, and distance ratios) as well as visualization techniques (such as t-SNE and PCA). This analysis of how augmentation reshapes the geometry of learned representations differently for CNNs and Vision Transformers is the main novel contribution we hope to make with this project.
+
+\textbf{Important note on computation:} If we find that our computing resources are limited, we will reduce the size of the training dataset proportionally across all phases and document this decision clearly in our results. Our main priority is to ensure a fair comparison between the two architectures rather than achieving the highest possible accuracy numbers.
+
+\section{Dataset and Models}
+
+We will use the \textbf{CINIC-10} dataset, which consists of 270,000 colour images of size $32\times32$ pixels distributed equally across 10 classes. The dataset is split into three equal parts: a training set, a validation set, and a test set, each containing 90,000 images. The model architectures are summarized in Table~\ref{tab:models}.
+
+\begin{table}[H]
+\centering
+\caption{Model architectures used in our experiments.}
+\label{tab:models}
+\begin{tabular}{@{}llcl@{}}
+\toprule
+\textbf{Model} & \textbf{Type} & \textbf{Parameters} & \textbf{Purpose} \\
+\midrule
+Custom CNN & CNN, trained from scratch & $\sim$1M & Baseline comparison \\
+ResNet-18 & CNN, pretrained & $\sim$11.2M & Primary CNN model \\
+DeiT-Tiny & Vision Transformer, pretrained & $\sim$5.7M & Primary ViT model \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+DeiT-Tiny is designed to accept images of size $224\times224$ pixels, so we will scale our CINIC-10 images up using bilinear interpolation. Throughout all our experiments, we will run each configuration with 3 different random seeds to ensure our results are stable and reproducible. We will report all results as the mean value plus or minus the standard deviation across these 3 runs.
+
+\section{Experiments}
+
+\subsection{Phase 1: Baseline Architecture Comparison}
+
+We will train all three models using the same default settings: the AdamW optimizer with a standard learning rate for each architecture (based on literature recommendations for the respective model sizes and CINIC-10 dataset), no data augmentation, and no regularization techniques (see Table~\ref{tab:phase1}).
+
+\begin{table}[H]
+\centering
+\caption{Phase 1: Training three architectures with default settings.}
+\label{tab:phase1}
+\begin{tabular}{@{}clccc@{}}
+\toprule
+\textbf{Model} & \textbf{Dataset} & \textbf{Optimizer} & \textbf{Seeds} \\
+\midrule
+Custom CNN & Full training set & AdamW, literature-based LR & 3 \\
+ResNet-18  & Full training set & AdamW, literature-based LR & 3 \\
+DeiT-Tiny  & Full training set & AdamW, literature-based LR & 3 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Phase 2: Hyperparameter Optimization}
+
+Next, we want to find the best hyperparameter settings for each architecture. To keep this computationally manageable, we will perform a grid search using a reduced portion of the training data (around 10--20\%) while still being able to capture interactions between different hyperparameters. Since CNNs and Vision Transformers have different training characteristics, we will use separate hyperparameter grids for each architecture type, guided by findings in the literature.
+
+We will vary four key training settings, with architecture-specific ranges (see Tables~\ref{tab:hp_resnet} and \ref{tab:hp_deit}):
+
+\begin{table}[H]
+\centering
+\caption{Hyperparameter ranges for ResNet-18 (CNN) in Phase 2.}
+\label{tab:hp_resnet}
+\begin{tabular}{@{}llcc@{}}
+\toprule
+\textbf{Hyperparameter} & \textbf{Category} & \textbf{Option 1} & \textbf{Option 2} \\
+\midrule
+Learning rate & Optimization & Literature-based LR & Higher LR value \\
+LR Scheduler & Optimization & No scheduler & Cosine annealing \\
+DropPath rate & Regularization & No DropPath & Standard DropPath rate \\
+Weight decay & Regularization & Standard CNN range & Higher CNN range \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Hyperparameter ranges for DeiT-Tiny (ViT) in Phase 2.}
+\label{tab:hp_deit}
+\begin{tabular}{@{}llcc@{}}
+\toprule
+\textbf{Hyperparameter} & \textbf{Category} & \textbf{Option 1} & \textbf{Option 2} \\
+\midrule
+Learning rate & Optimization & Literature-based LR & Higher LR value \\
+LR Scheduler & Optimization & No scheduler & Cosine annealing \\
+DropPath rate & Regularization & No DropPath & Standard DropPath rate \\
+Weight decay & Regularization & Standard ViT range & Higher ViT range \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+With four hyperparameters and two options each, this creates a $2^4$ grid of 16 configurations per architecture. For each architecture and configuration, we run 3 seeds, giving us a reasonable number of experiments that we can complete with available resources. From these results, we will identify the best hyperparameter combination for ResNet-18 and the best combination for DeiT-Tiny.
+
+\subsection{Phase 3: Data Augmentation Analysis}
+
+In this phase, we take the best hyperparameters found in Phase 2 for each architecture and evaluate how different augmentation strategies affect performance when training on the full dataset. We will test several combinations of augmentation techniques (see Table~\ref{tab:aug_strategies}):
+
+\begin{table}[H]
+\centering
+\caption{Augmentation strategies we will test in Phase 3.}
+\label{tab:aug_strategies}
+\begin{tabular}{@{}clll@{}}
+\toprule
+\textbf{Strategy} & \textbf{Techniques} & \textbf{Architectures} \\
+\midrule
+Baseline & No augmentation & both \\
+Standard & Flipping, cropping, color jitter & both \\
+Advanced & Mixing-based method (e.g., CutMix) & both \\
+Combined & Standard + advanced techniques & both\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Each configuration will use 3 seeds. This will help us understand which augmentation strategies help the most, and whether the two architectures prefer different augmentation approaches. The best augmentation strategy for each model will be carried forward to Phase 4.
+
+\subsection{Phase 4: Few-Shot Learning and Embedding Space Analysis}
+
+\subsubsection{Few-Shot Learning with Different Augmentation Strategies}
+
+We will reduce the training dataset significantly to simulate the challenging scenario of learning from very limited data. We will then train using Prototypical Networks with different backbone architectures (ResNet-18 and DeiT-Tiny) and different augmentation strategies from Phase 3. Each configuration will use 3 random seeds (see Table~\ref{tab:fewshot_experiments}).
+
+\begin{table}[H]
+\centering
+\caption{Few-shot learning experiments with augmentation ablation.}
+\label{tab:fewshot_experiments}
+\begin{tabular}{@{}llcc@{}}
+\toprule
+\textbf{Augmentation Strategy} & \textbf{Backbone} & \textbf{Reduced Data} & \textbf{Seeds} \\
+\midrule
+Baseline & ResNet-18 & Reduced & 3 \\
+Baseline & DeiT-Tiny & Reduced & 3 \\
+Standard & ResNet-18 & Reduced & 3 \\
+Standard & DeiT-Tiny & Reduced & 3 \\
+Advanced & ResNet-18 & Reduced & 3 \\
+Advanced & DeiT-Tiny & Reduced & 3 \\
+Combined & ResNet-18 & Reduced & 3 \\
+Combined & DeiT-Tiny & Reduced & 3 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+For the episodic training, we will perform a 10-way classification task where the model must distinguish between some number of examples from each of the 10 classes, with queries used to evaluate performance. We will run a sufficiently large number of episodes during training to ensure stable learning.
+
+\subsubsection{Quantitative Analysis of Learned Representations}
+
+For each of the models trained in few-shot learning, we will extract the learned feature representations and compute metrics that reveal the quality and structure of these learned spaces:
+
+\begin{itemize}[nosep]
+    \item \textbf{Silhouette score} --- measures how tightly each class clusters around its own center compared to other classes. Higher values indicate better-separated, more cohesive class clusters.
+    
+    \item \textbf{Davies--Bouldin index} --- compares the average scatter within clusters to the separation between clusters. Lower values indicate better clustering quality.
+    
+    \item \textbf{Inter-class / intra-class distance ratio} --- the average distance between class centers divided by the average distance between examples within classes. Higher ratios indicate more discriminative embeddings.
+    
+    \item \textbf{Centroid separation heatmap} --- a $10 \times 10$ matrix of pairwise Euclidean distances between all class centers, visualized to identify which class pairs are most easily confused.
+\end{itemize}
+
+All of these metrics will be computed on the learned embeddings, and we'll also create visualizations to see what the representations look like when projected into 2D or 3D space. We'll report all metrics as mean and standard deviation across our 3 seeds.
+
+By comparing these embedding metrics across different augmentation strategies and between the two architectures, we can answer important questions: Does better accuracy also lead to better-structured embedding spaces? Do CNNs and Vision Transformers organize learned representations differently?
+
+\subsubsection{Comparison with Standard Training}
+
+As a sanity check, we will also train both architectures on the reduced dataset using standard supervised learning (not few-shot episodic training) with the best augmentation strategy and hyperparameters found in Phase 3. This lets us compare how the few-shot approach performs relative to a conventional training pipeline under the same data scarcity constraint, as summarized in Table~\ref{tab:standard_training}.
+
+\begin{table}[H]
+\centering
+\caption{Standard supervised training on reduced data for comparison.}
+\label{tab:standard_training}
+\begin{tabular}{@{}llccc@{}}
+\toprule
+\textbf{Training Method} & \textbf{Backbone} & \textbf{Reduced Data} & \textbf{Seeds} \\
+\midrule
+Standard supervised & ResNet-18 & Reduced & 3 \\
+Standard supervised & DeiT-Tiny & Reduced & 3 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Key Research Questions}
+
+The main questions we want to answer through Phase 4 are:
+
+\begin{itemize}[nosep]
+    \item \textbf{Augmentation effectiveness in few-shot learning:} Which augmentation strategy helps the most when training data is very limited? Does the best strategy differ between ResNet-18 and DeiT-Tiny?
+    
+    \item \textbf{Augmentation and embedding quality:} When augmentation improves accuracy, does it also improve the clustering metrics? Or are there cases where accuracy improves but the embedding space becomes less structured?
+    
+    \item \textbf{Architecture differences in representation learning:} Do ResNet-18 and DeiT-Tiny learn fundamentally different feature representations? Which class pairs is each architecture most likely to confuse?
+    
+    \item \textbf{Few-shot vs. standard training:} Under severe data scarcity, does training with Prototypical Networks outperform standard supervised learning, and does this depend on the augmentation strategy?
+\end{itemize}
+
+\subsection{Ensemble Learning Extension}
+
+In addition to evaluating the individual performance of ResNet-18 and DeiT-Tiny, we introduce ensemble methods to investigate whether combining CNN and Vision Transformer representations leads to improved performance. For all ensemble experiments, we use the best-performing model configurations identified in Phase 2 and Phase 3.
+
+First, we apply \textbf{soft voting} at the prediction level. For each input sample, we average the softmax probability outputs of the optimized ResNet-18 and DeiT-Tiny models and select the final class based on the highest averaged probability.
+
+Second, we implement a \textbf{stacking strategy at the embedding level}. We concatenate the learned embeddings from the optimized ResNet-18 and DeiT-Tiny models and train a logistic regression classifier on top of the combined representation. The backbone models remain frozen during this stage, and only the logistic regression layer is trained.
+
+
+\section{Division of Work}
+
+The general division of responsibilities between team members is presented in Table~\ref{tab:responsibilities}.
+
+\begin{table}[H]
+\centering
+\caption{General division of responsibilities between team members.}
+\label{tab:responsibilities}
+\begin{tabular}{@{}p{0.32\textwidth}p{0.32\textwidth}p{0.32\textwidth}@{}}
+\toprule
+\textbf{Area} & \textbf{Bart\l{}omiej Borycki} & \textbf{Micha\l{} Iwaniuk} \\
+\midrule
+
+Project setup
+& Experiment structure, reproducibility, logging framework
+& Data preparation, training environment \\
+
+\addlinespace
+
+Phases 1--2 (Baselines \& Hyperparameters)
+& CNN-focused experiments and analysis
+& Vision Transformer experiments and analysis \\
+
+\addlinespace
+
+Phase 3 (Augmentation Study)
+& Augmentation experiments for CNN models
+& Augmentation experiments for ViT models \\
+
+\addlinespace
+
+Phase 4 (Few-shot Learning)
+& Prototypical Networks with DeiT-Tiny backbone 
+& Prototypical Networks with ResNet-18 backbone \\
+
+\addlinespace
+
+Embedding Analysis \& Evaluation
+& Quantitative clustering metrics and comparisons
+& Visualization of embedding spaces and interpretation \\
+
+\addlinespace
+
+\midrule
+Shared responsibilities
+& \multicolumn{2}{p{0.64\textwidth}}{Experiment planning and final writing of the report.} \\
+\bottomrule
+\end{tabular}
+\end{table}
+\end{document}

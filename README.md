@@ -34,13 +34,13 @@ pip install -e .[dev]
 2. Run one baseline experiment:
 
 ```bash
-python -m archdyn.cli.train --config configs/phase1/efficientnet_b3_baseline.yaml
+python -m archdyn.cli.train --config configs/phase1/efficientnet_b3_baseline.yaml --seed 13
 ```
 
 3. Inspect outputs under:
 
 ```text
-outputs/phase1/efficientnet_b3_baseline/
+outputs/phase1/efficientnet_b3_baseline/seed_13/
 ```
 
 4. Run local checks:
@@ -64,7 +64,7 @@ src/archdyn/            Implementation package
 tests/                  Lightweight unit and smoke tests
 data/                   Local dataset root and subset manifests
 outputs/                Experiment artifacts and summaries
-docs/plan/              Project and implementation plan documents
+docs/                   Project and implementation plan documents
 ```
 
 ## Core modules
@@ -76,7 +76,7 @@ docs/plan/              Project and implementation plan documents
   - Validates modes, model names, and core config constraints.
 
 - `src/archdyn/reproducibility.py`
-  - Sets random seeds.
+  - Sets the single runtime seed for a run.
   - Resolves the compute device.
 
 - `src/archdyn/paths.py`
@@ -127,7 +127,7 @@ docs/plan/              Project and implementation plan documents
   - Classification metrics and embedding distance metrics.
 
 - `src/archdyn/evaluation/aggregate.py`
-  - Per-seed aggregation into mean and standard deviation summaries.
+  - Aggregation helper kept for future multi-run summarization.
 
 - `src/archdyn/evaluation/embeddings.py`
   - Embedding extraction, clustering metrics, PCA, t-SNE, and centroid heatmaps.
@@ -152,27 +152,22 @@ docs/plan/              Project and implementation plan documents
 - `src/archdyn/cli/ensemble.py`
   - Ensemble evaluation jobs.
 
+- `src/archdyn/cli/aggregate.py`
+  - Aggregates finished seed runs from the filesystem.
+
 ## How to use the system
 
 ### Main entrypoint concept
 
-There is no single orchestration script. The system is operated through CLI entrypoints, each of which takes one YAML config:
+There is no single orchestration script. The system is operated through CLI entrypoints, each of which takes one YAML config and one required runtime seed:
 
 ```bash
-python -m archdyn.cli.<command> --config <path-to-yaml>
+python -m archdyn.cli.<command> --config <path-to-yaml> --seed <int>
 ```
 
-The config determines:
+Each invocation runs exactly one seed. To compare multiple seeds, rerun the same command multiple times with different `--seed` values.
+Training and few-shot runs show a simple progress bar for epochs and batches or episodes.
 
-- experiment mode
-- phase/output grouping
-- model family and model name
-- dataset paths and split usage
-- subset behavior
-- optimizer and scheduler settings
-- augmentation strategy
-- few-shot episode settings
-- checkpoint input locations for analysis and ensemble jobs
 
 ### CLI to config mapping
 
@@ -188,9 +183,10 @@ Config sources:
 Examples:
 
 ```bash
-python -m archdyn.cli.train --config configs/phase1/custom_cnn_baseline.yaml
-python -m archdyn.cli.train --config configs/phase3/efficientnet_b3_combined.yaml
-python -m archdyn.cli.train --config configs/phase4/reduced_supervised_deit_tiny.yaml
+python -m archdyn.cli.train --config configs/phase1/custom_cnn_baseline.yaml --seed 37
+python -m archdyn.cli.train --config configs/phase3/efficientnet_b3_combined.yaml --seed 37
+python -m archdyn.cli.train --config configs/phase4/reduced_supervised_deit_tiny.yaml --seed 37
+python -m archdyn.cli.train --config configs/phase1/efficientnet_b3_baseline.yaml --seed 37
 ```
 
 #### `python -m archdyn.cli.search`
@@ -203,8 +199,8 @@ Config sources:
 Examples:
 
 ```bash
-python -m archdyn.cli.search --config configs/phase2/efficientnet_b3_search.yaml
-python -m archdyn.cli.search --config configs/phase2/deit_tiny_search.yaml
+python -m archdyn.cli.search --config configs/phase2/efficientnet_b3_search.yaml --seed 13
+python -m archdyn.cli.search --config configs/phase2/deit_tiny_search.yaml --seed 13
 ```
 
 #### `python -m archdyn.cli.fewshot`
@@ -217,8 +213,8 @@ Config sources:
 Examples:
 
 ```bash
-python -m archdyn.cli.fewshot --config configs/phase4/protonet_efficientnet_b3_standard.yaml
-python -m archdyn.cli.fewshot --config configs/phase4/protonet_deit_tiny_combined.yaml
+python -m archdyn.cli.fewshot --config configs/phase4/protonet_efficientnet_b3_standard.yaml --seed 13
+python -m archdyn.cli.fewshot --config configs/phase4/protonet_deit_tiny_combined.yaml --seed 13
 ```
 
 #### `python -m archdyn.cli.analyze_embeddings`
@@ -231,8 +227,8 @@ Config sources:
 Examples:
 
 ```bash
-python -m archdyn.cli.analyze_embeddings --config configs/analysis/embeddings_efficientnet_b3.yaml
-python -m archdyn.cli.analyze_embeddings --config configs/analysis/embeddings_deit_tiny.yaml
+python -m archdyn.cli.analyze_embeddings --config configs/analysis/embeddings_efficientnet_b3.yaml --seed 13
+python -m archdyn.cli.analyze_embeddings --config configs/analysis/embeddings_deit_tiny.yaml --seed 13
 ```
 
 #### `python -m archdyn.cli.ensemble`
@@ -245,7 +241,19 @@ Config sources:
 Example:
 
 ```bash
-python -m archdyn.cli.ensemble --config configs/ensembles/supervised_best_models.yaml
+python -m archdyn.cli.ensemble --config configs/ensembles/supervised_best_models.yaml --seed 13
+```
+
+#### `python -m archdyn.cli.aggregate`
+
+Use after multiple seeds have already been run to compute mean and standard deviation summaries from finished `seed_*` directories.
+
+Examples:
+
+```bash
+python -m archdyn.cli.aggregate --output-root outputs
+python -m archdyn.cli.aggregate --output-root outputs --phase phase3
+python -m archdyn.cli.aggregate --output-root outputs --phase phase3 --experiment efficientnet_b3_combined
 ```
 
 ### Configs
@@ -262,6 +270,9 @@ Important config fields:
 
 - `experiment_name`
   - Run name under `outputs/<phase>/`
+
+- `seed` is not stored in YAML
+  - it is supplied at runtime through `--seed`
 
 - `paths.data_root`
   - Root of CINIC-10
@@ -345,8 +356,8 @@ The system is executed as a sequence of CLI jobs. Each job:
 1. loads one YAML config
 2. builds the required datasets, models, and transforms
 3. runs the corresponding training or evaluation loop
-4. writes per-seed artifacts
-5. writes aggregated summaries
+4. shows a simple progress bar during training or episode loops
+5. writes artifacts under the seed-specific output directory
 
 There is no hidden state beyond:
 
@@ -434,13 +445,13 @@ Produces:
 
 ### Output directory conventions
 
-Per-seed outputs are written to:
+Outputs are written to:
 
 ```text
 outputs/<phase>/<experiment_name>/seed_<seed>/
 ```
 
-Typical per-seed files:
+Typical files:
 
 - `config.snapshot.yaml`
 - `train_history.csv`
@@ -452,22 +463,17 @@ Typical per-seed files:
 - `embeddings.npz`
 - `plots/`
 
-Aggregated outputs are written to:
-
-```text
-outputs/<phase>/<experiment_name>/aggregate/
-```
-
-Typical aggregate files:
-
-- `metrics_summary.csv`
-- `metrics_mean_std.json`
-
 Additional mode-specific outputs:
 
 - search jobs:
   - `search_results.csv`
   - `best_config.yaml`
+  - both written to the search run directory for the current seed
+
+- aggregate jobs:
+  - `aggregate/metrics_summary.csv`
+  - `aggregate/metrics_mean_std.json`
+  - and, for search experiments, `aggregate/search_results_all_seeds.csv`, `aggregate/search_results_aggregated.csv`, and `aggregate/best_search_result.json`
 
 - embedding analysis jobs:
   - `embedding_metrics.csv`
@@ -490,64 +496,79 @@ Put CINIC-10 under `data/cinic10/`.
 ### 2. Run Phase 1 baselines
 
 ```bash
-python -m archdyn.cli.train --config configs/phase1/custom_cnn_baseline.yaml
-python -m archdyn.cli.train --config configs/phase1/efficientnet_b3_baseline.yaml
-python -m archdyn.cli.train --config configs/phase1/deit_tiny_baseline.yaml
+python -m archdyn.cli.train --config configs/phase1/custom_cnn_baseline.yaml --seed 13
+python -m archdyn.cli.train --config configs/phase1/efficientnet_b3_baseline.yaml --seed 13
+python -m archdyn.cli.train --config configs/phase1/deit_tiny_baseline.yaml --seed 13
 ```
 
 ### 3. Run Phase 2 hyperparameter search
 
 ```bash
-python -m archdyn.cli.search --config configs/phase2/efficientnet_b3_search.yaml
-python -m archdyn.cli.search --config configs/phase2/deit_tiny_search.yaml
+python -m archdyn.cli.search --config configs/phase2/efficientnet_b3_search.yaml --seed 13
+python -m archdyn.cli.search --config configs/phase2/deit_tiny_search.yaml --seed 13
 ```
 
 ### 4. Run Phase 3 augmentation experiments
 
 ```bash
-python -m archdyn.cli.train --config configs/phase3/efficientnet_b3_baseline.yaml
-python -m archdyn.cli.train --config configs/phase3/efficientnet_b3_standard.yaml
-python -m archdyn.cli.train --config configs/phase3/efficientnet_b3_advanced.yaml
-python -m archdyn.cli.train --config configs/phase3/efficientnet_b3_combined.yaml
+python -m archdyn.cli.train --config configs/phase3/efficientnet_b3_baseline.yaml --seed 13
+python -m archdyn.cli.train --config configs/phase3/efficientnet_b3_standard.yaml --seed 13
+python -m archdyn.cli.train --config configs/phase3/efficientnet_b3_advanced.yaml --seed 13
+python -m archdyn.cli.train --config configs/phase3/efficientnet_b3_combined.yaml --seed 13
 
-python -m archdyn.cli.train --config configs/phase3/deit_tiny_baseline.yaml
-python -m archdyn.cli.train --config configs/phase3/deit_tiny_standard.yaml
-python -m archdyn.cli.train --config configs/phase3/deit_tiny_advanced.yaml
-python -m archdyn.cli.train --config configs/phase3/deit_tiny_combined.yaml
+python -m archdyn.cli.train --config configs/phase3/deit_tiny_baseline.yaml --seed 13
+python -m archdyn.cli.train --config configs/phase3/deit_tiny_standard.yaml --seed 13
+python -m archdyn.cli.train --config configs/phase3/deit_tiny_advanced.yaml --seed 13
+python -m archdyn.cli.train --config configs/phase3/deit_tiny_combined.yaml --seed 13
 ```
 
 ### 5. Run Phase 4 few-shot experiments
 
 ```bash
-python -m archdyn.cli.fewshot --config configs/phase4/protonet_efficientnet_b3_baseline.yaml
-python -m archdyn.cli.fewshot --config configs/phase4/protonet_efficientnet_b3_standard.yaml
-python -m archdyn.cli.fewshot --config configs/phase4/protonet_efficientnet_b3_advanced.yaml
-python -m archdyn.cli.fewshot --config configs/phase4/protonet_efficientnet_b3_combined.yaml
+python -m archdyn.cli.fewshot --config configs/phase4/protonet_efficientnet_b3_baseline.yaml --seed 13
+python -m archdyn.cli.fewshot --config configs/phase4/protonet_efficientnet_b3_standard.yaml --seed 13
+python -m archdyn.cli.fewshot --config configs/phase4/protonet_efficientnet_b3_advanced.yaml --seed 13
+python -m archdyn.cli.fewshot --config configs/phase4/protonet_efficientnet_b3_combined.yaml --seed 13
 
-python -m archdyn.cli.fewshot --config configs/phase4/protonet_deit_tiny_baseline.yaml
-python -m archdyn.cli.fewshot --config configs/phase4/protonet_deit_tiny_standard.yaml
-python -m archdyn.cli.fewshot --config configs/phase4/protonet_deit_tiny_advanced.yaml
-python -m archdyn.cli.fewshot --config configs/phase4/protonet_deit_tiny_combined.yaml
+python -m archdyn.cli.fewshot --config configs/phase4/protonet_deit_tiny_baseline.yaml --seed 13
+python -m archdyn.cli.fewshot --config configs/phase4/protonet_deit_tiny_standard.yaml --seed 13
+python -m archdyn.cli.fewshot --config configs/phase4/protonet_deit_tiny_advanced.yaml --seed 13
+python -m archdyn.cli.fewshot --config configs/phase4/protonet_deit_tiny_combined.yaml --seed 13
 ```
 
 ### 6. Run reduced-data supervised comparisons
 
 ```bash
-python -m archdyn.cli.train --config configs/phase4/reduced_supervised_efficientnet_b3.yaml
-python -m archdyn.cli.train --config configs/phase4/reduced_supervised_deit_tiny.yaml
+python -m archdyn.cli.train --config configs/phase4/reduced_supervised_efficientnet_b3.yaml --seed 13
+python -m archdyn.cli.train --config configs/phase4/reduced_supervised_deit_tiny.yaml --seed 13
 ```
 
 ### 7. Run embedding analysis
 
 ```bash
-python -m archdyn.cli.analyze_embeddings --config configs/analysis/embeddings_efficientnet_b3.yaml
-python -m archdyn.cli.analyze_embeddings --config configs/analysis/embeddings_deit_tiny.yaml
+python -m archdyn.cli.analyze_embeddings --config configs/analysis/embeddings_efficientnet_b3.yaml --seed 13
+python -m archdyn.cli.analyze_embeddings --config configs/analysis/embeddings_deit_tiny.yaml --seed 13
 ```
 
 ### 8. Run ensemble evaluation
 
 ```bash
-python -m archdyn.cli.ensemble --config configs/ensembles/supervised_best_models.yaml
+python -m archdyn.cli.ensemble --config configs/ensembles/supervised_best_models.yaml --seed 13
+```
+
+### 9. Aggregate results across seeds
+
+After running the same experiment for multiple seeds:
+
+```bash
+python -m archdyn.cli.aggregate --output-root outputs
+```
+
+To aggregate only one phase or one experiment:
+
+```bash
+python -m archdyn.cli.aggregate --output-root outputs --phase phase3
+python -m archdyn.cli.aggregate --output-root outputs --phase phase3 --experiment efficientnet_b3_combined
 ```
 
 ## Assumptions, limitations, and intended usage boundaries
@@ -555,6 +576,7 @@ python -m archdyn.cli.ensemble --config configs/ensembles/supervised_best_models
 ### Assumptions
 
 - CINIC-10 is present locally in `ImageFolder` layout.
+- The user runs one seed per CLI invocation, then repeats commands for other seeds if needed.
 - The user runs experiments through YAML configs rather than through notebooks.
 - The current experiment matrix is limited to `custom_cnn`, `efficientnet_b3`, and `deit_tiny`.
 - Phase 2 and Phase 4 reduced-data runs use deterministic class-balanced subsets.

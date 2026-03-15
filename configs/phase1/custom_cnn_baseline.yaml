@@ -1,0 +1,37 @@
+mode: supervised
+phase: phase1
+experiment_name: custom_cnn_baseline
+paths:
+  data_root: data/cinic10
+  output_root: outputs
+  subset_root: data/manifests
+dataset:
+  name: cinic10
+  train_split: train
+  val_split: valid
+  test_split: test
+  input_size: 224
+  num_classes: 10
+model:
+  family: custom_cnn
+  name: custom_cnn
+  pretrained: false
+  num_classes: 10
+  drop_path: 0.0
+optimizer:
+  name: adamw
+  lr: 0.001
+  weight_decay: 0.0001
+scheduler:
+  name: none
+training:
+  epochs: 50
+  batch_size: 128
+  num_workers: 4
+  device: auto
+augmentation:
+  name: baseline
+outputs:
+  save_checkpoints: true
+  save_predictions: true
+  save_embeddings: true

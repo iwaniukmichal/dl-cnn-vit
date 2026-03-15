@@ -1,0 +1,17 @@
+.DS_Store
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.venv/
+data/*
+!data/.gitignore
+outputs/*
+!outputs/.gitignore
+docs/plan/*.aux
+docs/plan/*.fdb_latexmk
+docs/plan/*.fls
+docs/plan/*.log
+docs/plan/*.out
+docs/plan/*.pdf
+docs/plan/*.synctex.gz

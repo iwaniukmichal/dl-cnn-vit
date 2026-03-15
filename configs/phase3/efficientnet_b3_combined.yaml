@@ -1,0 +1,29 @@
+mode: supervised
+phase: phase3
+experiment_name: efficientnet_b3_combined
+paths:
+  data_root: data/cinic10
+  output_root: outputs
+  subset_root: data/manifests
+dataset:
+  input_size: 224
+model:
+  family: pretrained_cnn
+  name: efficientnet_b3
+  pretrained: true
+  num_classes: 10
+  drop_path: 0.1
+optimizer:
+  name: adamw
+  lr: 0.001
+  weight_decay: 0.0005
+scheduler:
+  name: cosine
+training:
+  epochs: 30
+  batch_size: 32
+  num_workers: 4
+  device: auto
+augmentation:
+  name: combined
+  cutmix_alpha: 1.0

@@ -1,0 +1,23 @@
+mode: ensemble
+phase: ensembles
+experiment_name: supervised_best_models
+paths:
+  data_root: data/cinic10
+  output_root: outputs
+  subset_root: data/manifests
+dataset:
+  input_size: 224
+model:
+  family: pretrained_cnn
+  name: efficientnet_b3
+  pretrained: true
+  num_classes: 10
+training:
+  batch_size: 64
+  num_workers: 4
+ensemble:
+  cnn_checkpoint_dir: outputs/phase3/efficientnet_b3_combined
+  vit_checkpoint_dir: outputs/phase3/deit_tiny_combined
+  meta_split: valid
+  eval_split: test
+  logistic_regression_c: 1.0

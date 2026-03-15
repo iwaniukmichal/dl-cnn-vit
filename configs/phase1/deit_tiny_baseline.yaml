@@ -1,0 +1,33 @@
+mode: supervised
+phase: phase1
+experiment_name: deit_tiny_baseline
+paths:
+  data_root: data/cinic10
+  output_root: outputs
+  subset_root: data/manifests
+dataset:
+  input_size: 224
+  num_classes: 10
+model:
+  family: vit
+  name: deit_tiny
+  pretrained: true
+  num_classes: 10
+  drop_path: 0.0
+optimizer:
+  name: adamw
+  lr: 0.00005
+  weight_decay: 0.05
+scheduler:
+  name: none
+training:
+  epochs: 30
+  batch_size: 32
+  num_workers: 4
+  device: auto
+augmentation:
+  name: baseline
+outputs:
+  save_checkpoints: true
+  save_predictions: true
+  save_embeddings: true

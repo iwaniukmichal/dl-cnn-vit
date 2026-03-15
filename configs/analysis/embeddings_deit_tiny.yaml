@@ -1,0 +1,23 @@
+mode: embedding_analysis
+phase: analysis
+experiment_name: embeddings_deit_tiny
+paths:
+  data_root: data/cinic10
+  output_root: outputs
+  subset_root: data/manifests
+dataset:
+  input_size: 224
+model:
+  family: vit
+  name: deit_tiny
+  pretrained: true
+  num_classes: 10
+  drop_path: 0.1
+training:
+  batch_size: 64
+  num_workers: 4
+analysis:
+  checkpoint_dir: outputs/phase4/protonet_deit_tiny_combined
+  split: test
+  max_tsne_samples: 2000
+  tsne_random_state: 42

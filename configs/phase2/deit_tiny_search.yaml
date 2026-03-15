@@ -1,0 +1,41 @@
+mode: search
+phase: phase2
+experiment_name: deit_tiny_search
+paths:
+  data_root: data/cinic10
+  output_root: outputs
+  subset_root: data/manifests
+dataset:
+  input_size: 224
+  num_classes: 10
+subset:
+  enabled: true
+  fraction: 0.2
+  class_balanced: true
+  manifest_name: phase2_train20_deit_tiny.txt
+model:
+  family: vit
+  name: deit_tiny
+  pretrained: true
+  num_classes: 10
+  drop_path: 0.0
+optimizer:
+  name: adamw
+  lr: 0.00005
+  weight_decay: 0.05
+scheduler:
+  name: none
+training:
+  epochs: 15
+  batch_size: 32
+  num_workers: 4
+  device: auto
+augmentation:
+  name: baseline
+search:
+  selection_metric: val_accuracy
+  space:
+    lr: [0.00005, 0.0002]
+    scheduler: [none, cosine]
+    drop_path: [0.0, 0.1]
+    weight_decay: [0.05, 0.1]
