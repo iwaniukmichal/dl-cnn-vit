@@ -9,7 +9,7 @@ import yaml
 
 @dataclass(slots=True)
 class PathsConfig:
-    data_root: str = "data/cinic10"
+    data_root: str = "./../../input/datasets/mengcius/cinic10" #"data/cinic10"
     output_root: str = "outputs"
     subset_root: str = "data/manifests"
 
@@ -123,7 +123,8 @@ class RunConfig:
     optimizer: OptimizerConfig = field(default_factory=OptimizerConfig)
     scheduler: SchedulerConfig = field(default_factory=SchedulerConfig)
     training: TrainingConfig = field(default_factory=TrainingConfig)
-    augmentation: AugmentationConfig = field(default_factory=AugmentationConfig)
+    augmentation: AugmentationConfig = field(
+        default_factory=AugmentationConfig)
     fewshot: FewShotConfig = field(default_factory=FewShotConfig)
     outputs: OutputConfig = field(default_factory=OutputConfig)
     analysis: AnalysisConfig = field(default_factory=AnalysisConfig)
@@ -154,7 +155,8 @@ def load_run_config(path: str | Path) -> RunConfig:
         optimizer=_build_dataclass(OptimizerConfig, raw.get("optimizer")),
         scheduler=_build_dataclass(SchedulerConfig, raw.get("scheduler")),
         training=_build_dataclass(TrainingConfig, raw.get("training")),
-        augmentation=_build_dataclass(AugmentationConfig, raw.get("augmentation")),
+        augmentation=_build_dataclass(
+            AugmentationConfig, raw.get("augmentation")),
         fewshot=_build_dataclass(FewShotConfig, raw.get("fewshot")),
         outputs=_build_dataclass(OutputConfig, raw.get("outputs")),
         analysis=_build_dataclass(AnalysisConfig, raw.get("analysis")),
@@ -166,7 +168,8 @@ def load_run_config(path: str | Path) -> RunConfig:
 
 
 def validate_config(config: RunConfig) -> None:
-    valid_modes = {"supervised", "search", "fewshot", "embedding_analysis", "ensemble"}
+    valid_modes = {"supervised", "search",
+                   "fewshot", "embedding_analysis", "ensemble"}
     if config.mode not in valid_modes:
         raise ValueError(f"Unsupported mode: {config.mode}")
 
