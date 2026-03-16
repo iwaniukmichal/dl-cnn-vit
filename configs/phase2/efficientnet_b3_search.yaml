@@ -6,13 +6,13 @@ paths:
   output_root: outputs
   subset_root: data/manifests
 dataset:
-  input_size: 224
+  input_size: 300
   num_classes: 10
 subset:
   enabled: true
-  fraction: 0.2
+  fraction: 0.1
   class_balanced: true
-  manifest_name: phase2_train20_efficientnet_b3.txt
+  manifest_name: phase2_train10_efficientnet_b3.txt
 model:
   family: pretrained_cnn
   name: efficientnet_b3

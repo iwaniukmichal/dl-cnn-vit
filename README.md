@@ -292,17 +292,27 @@ Important config fields:
 - `subset.*`
   - Reduced-data controls for Phase 2 and Phase 4
 
+- `dataset.input_size`
+  - Input resolution used by the selected model config
+
+- `optimizer.*`, `scheduler.*`, `model.drop_path`
+  - Core hyperparameters that should be propagated from Phase 2 into later experiment configs
+
 - `augmentation.name`
   - `baseline`, `standard`, `advanced`, or `combined`
+  - In few-shot, `advanced` and `combined` now also apply CutMix to query images during training
 
 - `fewshot.*`
   - Episode shape and episode counts
+  - `training.batch_size` is not listed in few-shot YAMLs because episodes are controlled through `fewshot.*`
 
 - `analysis.checkpoint_dir`
   - Source directory for embedding-analysis checkpoints
 
 - `ensemble.cnn_checkpoint_dir` and `ensemble.vit_checkpoint_dir`
   - Source directories for ensemble checkpoints
+- `ensemble.cnn_input_size` and `ensemble.vit_input_size`
+  - Allow the ensemble job to evaluate CNN and ViT checkpoints with different input resolutions
 
 ### Data formats and input expectations
 
@@ -339,6 +349,7 @@ data/cinic10/
 
 - `fewshot`
   - Reads a reduced training subset and samples episodic support/query batches
+  - Uses the same optimizer, scheduler, weight decay, drop path, and augmentation config fields as later supervised phases
 
 - `embedding_analysis`
   - Reads saved few-shot checkpoints from `analysis.checkpoint_dir`
@@ -508,6 +519,15 @@ python -m archdyn.cli.search --config configs/phase2/efficientnet_b3_search.yaml
 python -m archdyn.cli.search --config configs/phase2/deit_tiny_search.yaml --seed 13
 ```
 
+Before moving to Phase 3 and Phase 4:
+
+1. Inspect `outputs/phase2/<experiment>/seed_<seed>/search_results.csv` and `best_config.yaml`.
+2. Manually copy the best `optimizer.lr`, `optimizer.weight_decay`, `scheduler`, and `model.drop_path` into:
+   - `configs/phase3/*.yaml` for the matching backbone
+   - `configs/phase4/protonet_*.yaml` for the matching backbone
+   - `configs/phase4/reduced_supervised_*.yaml` for the matching backbone
+3. If you change `subset.fraction`, also update `subset.manifest_name` so the manifest name matches the selected fraction.
+
 ### 4. Run Phase 3 augmentation experiments
 
 ```bash
@@ -522,6 +542,24 @@ python -m archdyn.cli.train --config configs/phase3/deit_tiny_advanced.yaml --se
 python -m archdyn.cli.train --config configs/phase3/deit_tiny_combined.yaml --seed 13
 ```
 
+Before moving to the few-shot, reduced-data supervised, analysis, and ensemble steps:
+
+1. Compare Phase 3 results per backbone and pick the best augmentation strategy.
+2. Keep the full augmentation matrix for few-shot:
+   - `configs/phase4/protonet_<backbone>_baseline.yaml`
+   - `configs/phase4/protonet_<backbone>_standard.yaml`
+   - `configs/phase4/protonet_<backbone>_advanced.yaml`
+   - `configs/phase4/protonet_<backbone>_combined.yaml`
+3. Manually propagate only the best Phase 2 hyperparameters into all matching Phase 4 configs for that backbone:
+   - `optimizer.lr`
+   - `optimizer.weight_decay`
+   - `scheduler`
+   - `model.drop_path`
+4. Use the winning Phase 3 augmentation when preparing reduced supervised comparisons, and when choosing which checkpoint lineage should be treated as the main downstream reference.
+5. Update downstream checkpoint references when needed:
+   - `configs/analysis/embeddings_*.yaml`
+   - `configs/ensembles/supervised_best_models.yaml`
+
 ### 5. Run Phase 4 few-shot experiments
 
 ```bash
@@ -535,6 +573,11 @@ python -m archdyn.cli.fewshot --config configs/phase4/protonet_deit_tiny_standar
 python -m archdyn.cli.fewshot --config configs/phase4/protonet_deit_tiny_advanced.yaml --seed 13
 python -m archdyn.cli.fewshot --config configs/phase4/protonet_deit_tiny_combined.yaml --seed 13
 ```
+
+Notes:
+
+- The default few-shot configs use `n_way: 5` to keep episodic tasks varied on CINIC-10.
+- `advanced` and `combined` few-shot configs can now use `cutmix_alpha` during training.
 
 ### 6. Run reduced-data supervised comparisons
 
@@ -555,6 +598,10 @@ python -m archdyn.cli.analyze_embeddings --config configs/analysis/embeddings_de
 ```bash
 python -m archdyn.cli.ensemble --config configs/ensembles/supervised_best_models.yaml --seed 13
 ```
+
+Note:
+
+- The ensemble config supports separate `ensemble.cnn_input_size` and `ensemble.vit_input_size`, so EfficientNet and DeiT can be evaluated at different resolutions.
 
 ### 9. Aggregate results across seeds
 

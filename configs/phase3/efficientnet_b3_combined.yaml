@@ -6,7 +6,7 @@ paths:
   output_root: outputs
   subset_root: data/manifests
 dataset:
-  input_size: 224
+  input_size: 300
 model:
   family: pretrained_cnn
   name: efficientnet_b3
@@ -20,7 +20,7 @@ optimizer:
 scheduler:
   name: cosine
 training:
-  epochs: 30
+  epochs: 20
   batch_size: 32
   num_workers: 4
   device: auto

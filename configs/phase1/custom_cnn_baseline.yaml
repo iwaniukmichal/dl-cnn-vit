@@ -9,7 +9,7 @@ dataset:
   train_split: train
   val_split: valid
   test_split: test
-  input_size: 224
+  input_size: 32
   num_classes: 10
 model:
   family: custom_cnn
@@ -24,7 +24,7 @@ optimizer:
 scheduler:
   name: none
 training:
-  epochs: 50
+  epochs: 30
   batch_size: 128
   num_workers: 4
   device: auto

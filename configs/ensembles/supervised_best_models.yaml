@@ -18,6 +18,8 @@ training:
 ensemble:
   cnn_checkpoint_dir: outputs/phase3/efficientnet_b3_combined
   vit_checkpoint_dir: outputs/phase3/deit_tiny_combined
+  cnn_input_size: 300
+  vit_input_size: 224
   meta_split: valid
   eval_split: test
   logistic_regression_c: 1.0

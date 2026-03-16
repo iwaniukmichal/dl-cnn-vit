@@ -16,6 +16,7 @@ from archdyn.models.prototypical import PrototypicalNetwork, prototypical_loss
 from archdyn.paths import prepare_run_dir, write_config_snapshot, write_json
 from archdyn.progress import progress
 from archdyn.reproducibility import resolve_device, seed_everything
+from archdyn.training.supervised import apply_cutmix, build_scheduler
 
 
 def run_fewshot_experiment(config: RunConfig) -> dict:
@@ -50,6 +51,7 @@ def run_fewshot_experiment(config: RunConfig) -> dict:
     model = PrototypicalNetwork(backbone).to(device)
     _status(f"Building optimizer: {config.optimizer.name}")
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.optimizer.lr, weight_decay=config.optimizer.weight_decay)
+    scheduler = build_scheduler(config, optimizer)
     scaler = _build_grad_scaler(device, amp_enabled)
 
     best_state = None
@@ -71,6 +73,7 @@ def run_fewshot_experiment(config: RunConfig) -> dict:
             device,
             scaler,
             amp_enabled,
+            config,
             train=True,
             epoch=epoch,
             total_epochs=config.training.epochs,
@@ -84,6 +87,7 @@ def run_fewshot_experiment(config: RunConfig) -> dict:
             device,
             scaler,
             amp_enabled,
+            config,
             train=False,
             epoch=epoch,
             total_epochs=config.training.epochs,
@@ -91,6 +95,8 @@ def run_fewshot_experiment(config: RunConfig) -> dict:
         )
         train_rows.append({"epoch": epoch, "loss": train_loss, "accuracy": train_accuracy})
         val_rows.append({"epoch": epoch, "loss": val_loss, "accuracy": val_accuracy})
+        if scheduler is not None:
+            scheduler.step()
         if val_accuracy > best_val_accuracy:
             best_val_accuracy = val_accuracy
             best_state = copy.deepcopy(model.state_dict())
@@ -119,6 +125,7 @@ def run_fewshot_experiment(config: RunConfig) -> dict:
         device,
         scaler,
         amp_enabled,
+        config,
         train=False,
         epoch=config.training.epochs,
         total_epochs=config.training.epochs,
@@ -149,6 +156,7 @@ def run_episode_epoch(
     device: torch.device,
     scaler,
     amp_enabled: bool,
+    config: RunConfig,
     train: bool,
     epoch: int,
     total_epochs: int,
@@ -173,10 +181,26 @@ def run_episode_epoch(
         query_labels = episode["query_labels"].to(device, non_blocking=device.type == "cuda")
         if train:
             optimizer.zero_grad(set_to_none=True)
+        query_inputs = query_images
+        query_labels_a = query_labels
+        query_labels_b = query_labels
+        lam = 1.0
+        if train and config.augmentation.name in {"advanced", "combined"}:
+            query_inputs, query_labels_a, query_labels_b, lam = apply_cutmix(
+                query_images.clone(),
+                query_labels,
+                alpha=config.augmentation.cutmix_alpha,
+            )
         with torch.set_grad_enabled(train):
             with torch.autocast(device_type=device.type, enabled=amp_enabled):
-                logits = model(support_images, support_labels, query_images)
-                loss = prototypical_loss(logits, query_labels)
+                logits = model(support_images, support_labels, query_inputs)
+                if lam < 1.0:
+                    loss = lam * prototypical_loss(logits, query_labels_a) + (1 - lam) * prototypical_loss(
+                        logits,
+                        query_labels_b,
+                    )
+                else:
+                    loss = prototypical_loss(logits, query_labels)
             if train:
                 if scaler.is_enabled():
                     scaler.scale(loss).backward()
@@ -186,7 +210,7 @@ def run_episode_epoch(
                     loss.backward()
                     optimizer.step()
         losses.append(float(loss.item()))
-        accuracies.append(accuracy_from_logits(logits.detach(), query_labels))
+        accuracies.append(_episode_accuracy(logits.detach(), query_labels_a, query_labels_b, lam))
         if hasattr(episode_iterator, "set_postfix"):
             episode_iterator.set_postfix(loss=f"{loss.item():.4f}")
     return float(np.mean(losses)), float(np.mean(accuracies))
@@ -202,6 +226,20 @@ def _build_grad_scaler(device: torch.device, amp_enabled: bool):
     if hasattr(torch, "amp") and hasattr(torch.amp, "GradScaler"):
         return torch.amp.GradScaler(device.type, enabled=amp_enabled)
     return torch.cuda.amp.GradScaler(enabled=amp_enabled and device.type == "cuda")
+
+
+def _episode_accuracy(
+    logits: torch.Tensor,
+    labels_a: torch.Tensor,
+    labels_b: torch.Tensor,
+    lam: float,
+) -> float:
+    if lam >= 1.0:
+        return accuracy_from_logits(logits, labels_a)
+    predictions = logits.argmax(dim=1)
+    accuracy_a = (predictions == labels_a).float().mean().item()
+    accuracy_b = (predictions == labels_b).float().mean().item()
+    return float(lam * accuracy_a + (1 - lam) * accuracy_b)
 
 
 def _status(message: str) -> None:

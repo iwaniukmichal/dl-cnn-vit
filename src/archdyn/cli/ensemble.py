@@ -22,38 +22,72 @@ def main() -> None:
     parser.add_argument("--seed", type=int, required=True)
     args = parser.parse_args()
     config = override_seed(load_run_config(args.config), args.seed)
-    _, eval_transform = build_supervised_transforms(config)
     device = resolve_device(config.training.device)
     seed = config.seed
     seed_everything(seed, deterministic=config.training.deterministic)
     run_directory = prepare_run_dir(config, seed)
     write_config_snapshot(config, run_directory / "config.snapshot.yaml")
 
-    eval_dataset = build_dataset(_without_subset(config), config.ensemble.eval_split, eval_transform)
-    eval_loader = build_dataloader(eval_dataset, config.training.batch_size, config.training.num_workers, False, device)
-    meta_dataset = build_dataset(_without_subset(config), config.ensemble.meta_split, eval_transform)
-    meta_loader = build_dataloader(meta_dataset, config.training.batch_size, config.training.num_workers, False, device)
-
     cnn_config = copy.deepcopy(config)
     cnn_config.model.family = "pretrained_cnn"
     cnn_config.model.name = "efficientnet_b3"
+    cnn_config.dataset.input_size = config.ensemble.cnn_input_size
     vit_config = copy.deepcopy(config)
     vit_config.model.family = "vit"
     vit_config.model.name = "deit_tiny"
+    vit_config.dataset.input_size = config.ensemble.vit_input_size
+
+    _, cnn_eval_transform = build_supervised_transforms(cnn_config)
+    _, vit_eval_transform = build_supervised_transforms(vit_config)
+
+    cnn_eval_dataset = build_dataset(_without_subset(cnn_config), config.ensemble.eval_split, cnn_eval_transform)
+    cnn_eval_loader = build_dataloader(
+        cnn_eval_dataset,
+        config.training.batch_size,
+        config.training.num_workers,
+        False,
+        device,
+    )
+    vit_eval_dataset = build_dataset(_without_subset(vit_config), config.ensemble.eval_split, vit_eval_transform)
+    vit_eval_loader = build_dataloader(
+        vit_eval_dataset,
+        config.training.batch_size,
+        config.training.num_workers,
+        False,
+        device,
+    )
+    cnn_meta_dataset = build_dataset(_without_subset(cnn_config), config.ensemble.meta_split, cnn_eval_transform)
+    cnn_meta_loader = build_dataloader(
+        cnn_meta_dataset,
+        config.training.batch_size,
+        config.training.num_workers,
+        False,
+        device,
+    )
+    vit_meta_dataset = build_dataset(_without_subset(vit_config), config.ensemble.meta_split, vit_eval_transform)
+    vit_meta_loader = build_dataloader(
+        vit_meta_dataset,
+        config.training.batch_size,
+        config.training.num_workers,
+        False,
+        device,
+    )
 
     cnn_model = build_model(cnn_config.model).to(device)
     vit_model = build_model(vit_config.model).to(device)
     cnn_model.load_state_dict(torch.load(Path(config.ensemble.cnn_checkpoint_dir) / f"seed_{seed}" / "checkpoint_best.pt", map_location=device))
     vit_model.load_state_dict(torch.load(Path(config.ensemble.vit_checkpoint_dir) / f"seed_{seed}" / "checkpoint_best.pt", map_location=device))
 
-    soft_metrics, soft_predictions = soft_voting(cnn_model, vit_model, eval_loader, device)
+    soft_metrics, soft_predictions = soft_voting(cnn_model, vit_model, cnn_eval_loader, vit_eval_loader, device)
     write_json(soft_metrics, run_directory / "soft_voting_metrics.json")
     pd.DataFrame({"prediction": soft_predictions}).to_csv(run_directory / "soft_voting_predictions.csv", index=False)
     stacking_metrics = stacking(
         cnn_model,
         vit_model,
-        meta_loader,
-        eval_loader,
+        cnn_meta_loader,
+        vit_meta_loader,
+        cnn_eval_loader,
+        vit_eval_loader,
         device,
         config.ensemble.logistic_regression_c,
         run_directory,

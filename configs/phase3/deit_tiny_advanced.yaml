@@ -20,7 +20,7 @@ optimizer:
 scheduler:
   name: cosine
 training:
-  epochs: 30
+  epochs: 20
   batch_size: 32
   num_workers: 4
   device: auto
