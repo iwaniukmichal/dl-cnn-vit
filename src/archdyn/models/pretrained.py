@@ -7,6 +7,12 @@ from archdyn.config import ModelConfig
 from archdyn.models.custom_cnn import CustomCNN
 
 
+TIMM_MODEL_NAMES = {
+    "efficientnet_b3": "efficientnet_b3",
+    "deit_tiny": "deit_tiny_patch16_224",
+}
+
+
 class TimmBackboneClassifier(nn.Module):
     def __init__(self, model_name: str, num_classes: int, pretrained: bool, drop_path: float) -> None:
         super().__init__()
@@ -33,7 +39,7 @@ def build_model(model_config: ModelConfig) -> nn.Module:
         return CustomCNN(num_classes=model_config.num_classes)
     if model_config.name in {"efficientnet_b3", "deit_tiny"}:
         return TimmBackboneClassifier(
-            model_name=model_config.name,
+            model_name=TIMM_MODEL_NAMES[model_config.name],
             num_classes=model_config.num_classes,
             pretrained=model_config.pretrained,
             drop_path=model_config.drop_path,
