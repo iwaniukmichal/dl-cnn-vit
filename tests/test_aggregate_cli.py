@@ -134,4 +134,15 @@ def test_aggregate_cli_aggregates_search_results_across_seeds(
     assert (aggregate_dir / "best_search_result.json").exists()
     aggregated = pd.read_csv(aggregate_dir / "search_results_aggregated.csv")
     assert "config_id" in aggregated.columns
+    assert "scheduler" in aggregated.columns
+    assert "lr" in aggregated.columns
+    assert "drop_path" in aggregated.columns
+    assert "weight_decay" in aggregated.columns
     assert "val_accuracy_mean" in aggregated.columns
+    assert set(aggregated["scheduler"]) == {"none"}
+    with (aggregate_dir / "best_search_result.json").open("r", encoding="utf-8") as handle:
+        best_payload = json.load(handle)
+    assert best_payload["scheduler"] == "none"
+    assert "lr" in best_payload
+    assert "drop_path" in best_payload
+    assert "weight_decay" in best_payload

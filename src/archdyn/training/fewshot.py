@@ -14,7 +14,6 @@ from archdyn.evaluation.metrics import accuracy_from_logits
 from archdyn.models.pretrained import build_model
 from archdyn.models.prototypical import PrototypicalNetwork, prototypical_loss
 from archdyn.paths import prepare_run_dir, write_config_snapshot, write_json
-from archdyn.progress import progress
 from archdyn.reproducibility import resolve_device, seed_everything
 from archdyn.training.supervised import apply_cutmix, build_scheduler
 
@@ -59,12 +58,7 @@ def run_fewshot_experiment(config: RunConfig) -> dict:
     train_rows = []
     val_rows = []
     _status(f"Starting few-shot training loop for {config.training.epochs} epochs")
-    epoch_iterator = progress(
-        range(1, config.training.epochs + 1),
-        desc=f"{config.experiment_name} seed={seed}",
-        leave=False,
-    )
-    for epoch in epoch_iterator:
+    for epoch in range(1, config.training.epochs + 1):
         train_loss, train_accuracy = run_episode_epoch(
             model,
             train_sampler,
@@ -101,8 +95,6 @@ def run_fewshot_experiment(config: RunConfig) -> dict:
             best_val_accuracy = val_accuracy
             best_state = copy.deepcopy(model.state_dict())
             _status(f"New best checkpoint at epoch={epoch} val_accuracy={val_accuracy:.4f}")
-        if hasattr(epoch_iterator, "set_postfix"):
-            epoch_iterator.set_postfix(train_loss=f"{train_loss:.4f}", val_acc=f"{val_accuracy:.3f}")
         print(
             f"[fewshot] Epoch {epoch}/{config.training.epochs}: "
             f"train_loss={train_loss:.4f} train_acc={train_accuracy:.4f} "
@@ -168,12 +160,7 @@ def run_episode_epoch(
         model.train()
     else:
         model.eval()
-    episode_iterator = progress(
-        range(num_episodes),
-        desc=f"{'train' if train else 'eval'} epoch={epoch}/{total_epochs} seed={seed}",
-        leave=False,
-    )
-    for _ in episode_iterator:
+    for _ in range(num_episodes):
         episode = sampler.sample_episode()
         support_images = episode["support_images"].to(device, non_blocking=device.type == "cuda")
         support_labels = episode["support_labels"].to(device, non_blocking=device.type == "cuda")
@@ -211,8 +198,6 @@ def run_episode_epoch(
                     optimizer.step()
         losses.append(float(loss.item()))
         accuracies.append(_episode_accuracy(logits.detach(), query_labels_a, query_labels_b, lam))
-        if hasattr(episode_iterator, "set_postfix"):
-            episode_iterator.set_postfix(loss=f"{loss.item():.4f}")
     return float(np.mean(losses)), float(np.mean(accuracies))
 
 

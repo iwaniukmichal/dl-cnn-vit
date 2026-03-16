@@ -69,13 +69,19 @@ def aggregate_search_results(experiment_dir: Path) -> pd.DataFrame:
         return pd.DataFrame()
 
     combined = pd.concat(frames, ignore_index=True)
-    numeric_columns = [column for column in combined.select_dtypes(include=["number"]).columns if column != "seed"]
     grouped = combined.groupby("config_id", dropna=False)
-    summary = grouped[numeric_columns].agg(["mean", "std"]).reset_index()
-    summary.columns = [
-        "config_id" if left == "config_id" else f"{left}_{right}"
-        for left, right in summary.columns.to_flat_index()
+
+    metric_columns = [column for column in ("val_accuracy", "test_accuracy") if column in combined.columns]
+    parameter_columns = [
+        column
+        for column in combined.columns
+        if column not in {"config_id", "seed", *metric_columns}
     ]
+
+    parameter_summary = grouped[parameter_columns].first() if parameter_columns else pd.DataFrame(index=grouped.size().index)
+    metric_summary = grouped[metric_columns].agg(["mean", "std"]) if metric_columns else pd.DataFrame(index=grouped.size().index)
+    metric_summary.columns = [f"{left}_{right}" for left, right in metric_summary.columns.to_flat_index()]
+    summary = pd.concat([parameter_summary, metric_summary], axis=1).reset_index()
 
     aggregate_dir = experiment_dir / "aggregate"
     aggregate_dir.mkdir(parents=True, exist_ok=True)

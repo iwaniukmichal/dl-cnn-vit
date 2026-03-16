@@ -499,6 +499,7 @@ Additional mode-specific outputs:
 ## End-to-end experiments for the project plan
 
 This is the intended run order for reproducing the planned project.
+Use the project-plan seed set `13`, `37`, and `73`: every training, search, few-shot, analysis, and ensemble command below should be rerun once per seed before you compare results or report mean/std values.
 
 ### 1. Prepare data
 
@@ -512,6 +513,12 @@ python -m archdyn.cli.train --config configs/phase1/efficientnet_b3_baseline.yam
 python -m archdyn.cli.train --config configs/phase1/deit_tiny_baseline.yaml --seed 13
 ```
 
+Repeat the same three commands with `--seed 37` and `--seed 73`, then aggregate Phase 1 results:
+
+```bash
+python -m archdyn.cli.aggregate --output-root outputs --phase phase1
+```
+
 ### 3. Run Phase 2 hyperparameter search
 
 ```bash
@@ -519,14 +526,22 @@ python -m archdyn.cli.search --config configs/phase2/efficientnet_b3_search.yaml
 python -m archdyn.cli.search --config configs/phase2/deit_tiny_search.yaml --seed 13
 ```
 
+Repeat both search commands with `--seed 37` and `--seed 73`, then aggregate each search experiment before choosing downstream hyperparameters:
+
+```bash
+python -m archdyn.cli.aggregate --output-root outputs --phase phase2 --experiment efficientnet_b3_search
+python -m archdyn.cli.aggregate --output-root outputs --phase phase2 --experiment deit_tiny_search
+```
+
 Before moving to Phase 3 and Phase 4:
 
-1. Inspect `outputs/phase2/<experiment>/seed_<seed>/search_results.csv` and `best_config.yaml`.
-2. Manually copy the best `optimizer.lr`, `optimizer.weight_decay`, `scheduler`, and `model.drop_path` into:
+1. Use `outputs/phase2/<experiment>/aggregate/search_results_aggregated.csv` and `best_search_result.json` as the source of truth for the winning Phase 2 settings across all three seeds.
+2. Do not choose the Phase 2 winner from a single `seed_<seed>/best_config.yaml` if you are following the project plan.
+3. Manually copy the winning `lr`, `weight_decay`, `scheduler`, and `drop_path` into:
    - `configs/phase3/*.yaml` for the matching backbone
    - `configs/phase4/protonet_*.yaml` for the matching backbone
    - `configs/phase4/reduced_supervised_*.yaml` for the matching backbone
-3. If you change `subset.fraction`, also update `subset.manifest_name` so the manifest name matches the selected fraction.
+4. If you change `subset.fraction`, also update `subset.manifest_name` so the manifest name matches the selected fraction in every config that shares that subset.
 
 ### 4. Run Phase 3 augmentation experiments
 
@@ -542,9 +557,15 @@ python -m archdyn.cli.train --config configs/phase3/deit_tiny_advanced.yaml --se
 python -m archdyn.cli.train --config configs/phase3/deit_tiny_combined.yaml --seed 13
 ```
 
+Repeat the full Phase 3 matrix with `--seed 37` and `--seed 73`, then aggregate Phase 3 before picking the best augmentation per backbone:
+
+```bash
+python -m archdyn.cli.aggregate --output-root outputs --phase phase3
+```
+
 Before moving to the few-shot, reduced-data supervised, analysis, and ensemble steps:
 
-1. Compare Phase 3 results per backbone and pick the best augmentation strategy.
+1. Compare `outputs/phase3/<experiment>/aggregate/metrics_mean_std.json` across experiments and pick the best augmentation strategy per backbone from the aggregated multi-seed results.
 2. Keep the full augmentation matrix for few-shot:
    - `configs/phase4/protonet_<backbone>_baseline.yaml`
    - `configs/phase4/protonet_<backbone>_standard.yaml`
@@ -557,8 +578,8 @@ Before moving to the few-shot, reduced-data supervised, analysis, and ensemble s
    - `model.drop_path`
 4. Use the winning Phase 3 augmentation when preparing reduced supervised comparisons, and when choosing which checkpoint lineage should be treated as the main downstream reference.
 5. Update downstream checkpoint references when needed:
-   - `configs/analysis/embeddings_*.yaml`
-   - `configs/ensembles/supervised_best_models.yaml`
+   - set `analysis.checkpoint_dir` in `configs/analysis/embeddings_*.yaml` to `outputs/phase4/<selected_fewshot_experiment>`
+   - set `ensemble.cnn_checkpoint_dir` and `ensemble.vit_checkpoint_dir` in `configs/ensembles/supervised_best_models.yaml` to the selected Phase 3 experiment directories under `outputs/phase3/`
 
 ### 5. Run Phase 4 few-shot experiments
 
@@ -576,7 +597,7 @@ python -m archdyn.cli.fewshot --config configs/phase4/protonet_deit_tiny_combine
 
 Notes:
 
-- The default few-shot configs use `n_way: 5` to keep episodic tasks varied on CINIC-10.
+- The provided few-shot configs are `5-way, 5-shot, 15-query`.
 - `advanced` and `combined` few-shot configs can now use `cutmix_alpha` during training.
 
 ### 6. Run reduced-data supervised comparisons
@@ -586,6 +607,12 @@ python -m archdyn.cli.train --config configs/phase4/reduced_supervised_efficient
 python -m archdyn.cli.train --config configs/phase4/reduced_supervised_deit_tiny.yaml --seed 13
 ```
 
+Repeat Phase 4 few-shot and reduced supervised runs with `--seed 37` and `--seed 73`, then aggregate Phase 4 before comparing few-shot against reduced supervised baselines:
+
+```bash
+python -m archdyn.cli.aggregate --output-root outputs --phase phase4
+```
+
 ### 7. Run embedding analysis
 
 ```bash
@@ -593,10 +620,22 @@ python -m archdyn.cli.analyze_embeddings --config configs/analysis/embeddings_ef
 python -m archdyn.cli.analyze_embeddings --config configs/analysis/embeddings_deit_tiny.yaml --seed 13
 ```
 
+Repeat both analysis jobs with `--seed 37` and `--seed 73`, then aggregate the `analysis` phase to obtain mean/std summaries for the embedding metrics:
+
+```bash
+python -m archdyn.cli.aggregate --output-root outputs --phase analysis
+```
+
 ### 8. Run ensemble evaluation
 
 ```bash
 python -m archdyn.cli.ensemble --config configs/ensembles/supervised_best_models.yaml --seed 13
+```
+
+Repeat the ensemble run with `--seed 37` and `--seed 73`, then aggregate the ensemble phase:
+
+```bash
+python -m archdyn.cli.aggregate --output-root outputs --phase ensembles
 ```
 
 Note:
@@ -623,7 +662,7 @@ python -m archdyn.cli.aggregate --output-root outputs --phase phase3 --experimen
 ### Assumptions
 
 - CINIC-10 is present locally in `ImageFolder` layout.
-- The user runs one seed per CLI invocation, then repeats commands for other seeds if needed.
+- The user runs one seed per CLI invocation, then repeats commands for the planned seed set `13`, `37`, and `73`.
 - The user runs experiments through YAML configs rather than through notebooks.
 - The current experiment matrix is limited to `custom_cnn`, `efficientnet_b3`, and `deit_tiny`.
 - Phase 2 and Phase 4 reduced-data runs use deterministic class-balanced subsets.

@@ -14,7 +14,6 @@ from archdyn.data.transforms import build_supervised_transforms
 from archdyn.evaluation.metrics import accuracy_from_logits, classification_metrics, save_confusion_matrix
 from archdyn.models.pretrained import build_model
 from archdyn.paths import prepare_run_dir, write_config_snapshot, write_json
-from archdyn.progress import progress
 from archdyn.reproducibility import resolve_device, seed_everything
 
 
@@ -54,12 +53,7 @@ def run_supervised_experiment(config: RunConfig) -> dict:
     train_history = []
     val_history = []
     _status(f"Starting training loop for {config.training.epochs} epochs")
-    epoch_iterator = progress(
-        range(1, config.training.epochs + 1),
-        desc=f"{config.experiment_name} seed={seed}",
-        leave=False,
-    )
-    for epoch in epoch_iterator:
+    for epoch in range(1, config.training.epochs + 1):
         train_loss, train_accuracy = train_one_epoch(
             model,
             loaders["train"],
@@ -81,8 +75,6 @@ def run_supervised_experiment(config: RunConfig) -> dict:
             best_val_accuracy = val_accuracy
             best_state = copy.deepcopy(model.state_dict())
             _status(f"New best checkpoint at epoch={epoch} val_accuracy={val_accuracy:.4f}")
-        if hasattr(epoch_iterator, "set_postfix"):
-            epoch_iterator.set_postfix(train_loss=f"{train_loss:.4f}", val_acc=f"{val_accuracy:.3f}")
         print(
             f"[supervised] Epoch {epoch}/{config.training.epochs}: "
             f"train_loss={train_loss:.4f} train_acc={train_accuracy:.4f} "
@@ -143,13 +135,8 @@ def train_one_epoch(
     model.train()
     losses = []
     accuracies = []
-    batch_iterator = progress(
-        dataloader,
-        desc=f"train epoch={epoch}/{config.training.epochs} seed={seed}",
-        leave=False,
-    )
     use_async_transfer = device.type == "cuda"
-    for images, labels in batch_iterator:
+    for images, labels in dataloader:
         images = images.to(device, non_blocking=use_async_transfer)
         labels = labels.to(device, non_blocking=use_async_transfer)
         optimizer.zero_grad(set_to_none=True)
@@ -170,8 +157,6 @@ def train_one_epoch(
             optimizer.step()
         losses.append(float(loss.item()))
         accuracies.append(accuracy_from_logits(logits.detach(), labels))
-        if hasattr(batch_iterator, "set_postfix"):
-            batch_iterator.set_postfix(loss=f"{loss.item():.4f}")
     return float(np.mean(losses)), float(np.mean(accuracies))
 
 
