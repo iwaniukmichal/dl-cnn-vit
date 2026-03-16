@@ -2,7 +2,6 @@ mode: supervised
 phase: phase3
 experiment_name: efficientnet_b3_combined
 paths:
-  data_root: data/cinic10
   output_root: outputs
   subset_root: data/manifests
 dataset:

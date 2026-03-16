@@ -14,3 +14,4 @@ docs/plan/*.log
 docs/plan/*.out
 docs/plan/*.pdf
 docs/plan/*.synctex.gz
+.token*
