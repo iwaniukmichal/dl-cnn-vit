@@ -24,7 +24,7 @@ optimizer:
 scheduler:
   name: none
 training:
-  epochs: 40
+  epochs: 20
   batch_size: 128
   num_workers: 4
   device: auto

@@ -290,7 +290,7 @@ Important config fields:
   - `custom_cnn`, `efficientnet_b3`, or `deit_tiny`
 
 - `subset.*`
-  - Reduced-data controls for Phase 2 and Phase 4
+  - Reduced-data controls for Phase 2, Phase 3, and Phase 4
 
 - `dataset.input_size`
   - Input resolution used by the selected model config
@@ -409,7 +409,7 @@ Trains:
 - `deit_tiny`
 
 Inputs:
-- full training split
+- deterministic reduced training subset
 - configured augmentation strategy
 - tuned optimization settings encoded in YAML
 
@@ -563,6 +563,8 @@ Repeat the full Phase 3 matrix with `--seed 37` and `--seed 73`, then aggregate 
 python -m archdyn.cli.aggregate --output-root outputs --phase phase3
 ```
 
+The provided Phase 3 configs now use a shared deterministic `10%` class-balanced training subset via `subset.enabled: true`, `subset.fraction: 0.1`, and `subset.manifest_name: phase3_train10.txt`.
+
 Before moving to the few-shot, reduced-data supervised, analysis, and ensemble steps:
 
 1. Compare `outputs/phase3/<experiment>/aggregate/metrics_mean_std.json` across experiments and pick the best augmentation strategy per backbone from the aggregated multi-seed results.
@@ -665,7 +667,7 @@ python -m archdyn.cli.aggregate --output-root outputs --phase phase3 --experimen
 - The user runs one seed per CLI invocation, then repeats commands for the planned seed set `13`, `37`, and `73`.
 - The user runs experiments through YAML configs rather than through notebooks.
 - The current experiment matrix is limited to `custom_cnn`, `efficientnet_b3`, and `deit_tiny`.
-- Phase 2 and Phase 4 reduced-data runs use deterministic class-balanced subsets.
+- Phase 2, Phase 3, and Phase 4 reduced-data runs use deterministic class-balanced subsets.
 
 ### Limitations
 

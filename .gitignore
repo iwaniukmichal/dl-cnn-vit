@@ -6,9 +6,7 @@ __pycache__/
 .mypy_cache/
 .venv/
 data/*
-!data/.gitignore
-outputs/*
-!outputs/.gitignore
+!data/.gitkeep
 docs/plan/*.aux
 docs/plan/*.fdb_latexmk
 docs/plan/*.fls

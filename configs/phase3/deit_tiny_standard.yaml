@@ -7,6 +7,11 @@ paths:
   subset_root: data/manifests
 dataset:
   input_size: 224
+subset:
+  enabled: true
+  fraction: 0.1
+  class_balanced: true
+  manifest_name: phase3_train10.txt
 model:
   family: vit
   name: deit_tiny
@@ -20,7 +25,7 @@ optimizer:
 scheduler:
   name: cosine
 training:
-  epochs: 20
+  epochs: 10
   batch_size: 64
   num_workers: 4
   device: auto

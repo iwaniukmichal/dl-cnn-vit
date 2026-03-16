@@ -25,7 +25,7 @@ optimizer:
 scheduler:
   name: cosine
 training:
-  epochs: 20
+  epochs: 10
   num_workers: 4
 augmentation:
   name: advanced
