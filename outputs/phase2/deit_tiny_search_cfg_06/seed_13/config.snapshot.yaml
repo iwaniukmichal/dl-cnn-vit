@@ -1,0 +1,84 @@
+mode: supervised
+phase: phase2
+experiment_name: deit_tiny_search_cfg_06
+paths:
+  data_root: ./../../input/datasets/mengcius/cinic10
+  output_root: outputs
+  subset_root: data/manifests
+dataset:
+  name: cinic10
+  train_split: train
+  val_split: valid
+  test_split: test
+  input_size: 224
+  num_classes: 10
+  normalization: imagenet
+subset:
+  enabled: true
+  fraction: 0.05
+  class_balanced: true
+  manifest_name: phase2_subset05_deit_tiny.txt
+seed: 13
+model:
+  family: vit
+  name: deit_tiny
+  pretrained: true
+  num_classes: 10
+  drop_path: 0.0
+optimizer:
+  name: adamw
+  lr: 5.0e-05
+  weight_decay: 0.1
+scheduler:
+  name: cosine
+  t_max: null
+training:
+  epochs: 5
+  batch_size: 64
+  num_workers: 4
+  device: auto
+  deterministic: false
+  mixed_precision: true
+  log_every: 20
+augmentation:
+  name: baseline
+  cutmix_alpha: 1.0
+fewshot:
+  n_way: 10
+  k_shot: 5
+  q_query: 15
+  train_episodes: 200
+  val_episodes: 100
+  test_episodes: 200
+outputs:
+  save_checkpoints: true
+  save_predictions: true
+  save_embeddings: true
+analysis:
+  checkpoint_dir: ''
+  split: test
+  max_tsne_samples: 2000
+  tsne_random_state: 42
+ensemble:
+  cnn_checkpoint_dir: ''
+  vit_checkpoint_dir: ''
+  cnn_input_size: 300
+  vit_input_size: 224
+  meta_split: valid
+  eval_split: test
+  logistic_regression_c: 1.0
+search:
+  space:
+    lr:
+    - 5.0e-05
+    - 0.0002
+    scheduler:
+    - none
+    - cosine
+    drop_path:
+    - 0.0
+    - 0.1
+    weight_decay:
+    - 0.05
+    - 0.1
+  selection_metric: val_accuracy
