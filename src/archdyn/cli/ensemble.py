@@ -40,7 +40,7 @@ def main() -> None:
     _, cnn_eval_transform = build_supervised_transforms(cnn_config)
     _, vit_eval_transform = build_supervised_transforms(vit_config)
 
-    cnn_eval_dataset = build_dataset(_without_subset(cnn_config), config.ensemble.eval_split, cnn_eval_transform)
+    cnn_eval_dataset = build_dataset(cnn_config, config.ensemble.eval_split, cnn_eval_transform)
     cnn_eval_loader = build_dataloader(
         cnn_eval_dataset,
         config.training.batch_size,
@@ -48,7 +48,7 @@ def main() -> None:
         False,
         device,
     )
-    vit_eval_dataset = build_dataset(_without_subset(vit_config), config.ensemble.eval_split, vit_eval_transform)
+    vit_eval_dataset = build_dataset(vit_config, config.ensemble.eval_split, vit_eval_transform)
     vit_eval_loader = build_dataloader(
         vit_eval_dataset,
         config.training.batch_size,
@@ -56,7 +56,7 @@ def main() -> None:
         False,
         device,
     )
-    cnn_meta_dataset = build_dataset(_without_subset(cnn_config), config.ensemble.meta_split, cnn_eval_transform)
+    cnn_meta_dataset = build_dataset(cnn_config, config.ensemble.meta_split, cnn_eval_transform)
     cnn_meta_loader = build_dataloader(
         cnn_meta_dataset,
         config.training.batch_size,
@@ -64,7 +64,7 @@ def main() -> None:
         False,
         device,
     )
-    vit_meta_dataset = build_dataset(_without_subset(vit_config), config.ensemble.meta_split, vit_eval_transform)
+    vit_meta_dataset = build_dataset(vit_config, config.ensemble.meta_split, vit_eval_transform)
     vit_meta_loader = build_dataloader(
         vit_meta_dataset,
         config.training.batch_size,
@@ -100,13 +100,5 @@ def main() -> None:
         "stacking_macro_f1": stacking_metrics["macro_f1"],
     }
     write_json(summary, run_directory / "test_metrics.json")
-
-
-def _without_subset(config):
-    clone = copy.deepcopy(config)
-    clone.subset.enabled = False
-    return clone
-
-
 if __name__ == "__main__":
     main()

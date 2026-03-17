@@ -28,7 +28,7 @@ def main() -> None:
     run_directory = prepare_run_dir(config, seed)
     write_config_snapshot(config, run_directory / "config.snapshot.yaml")
     split = config.dataset.test_split if config.analysis.split == "test" else config.analysis.split
-    dataset = build_dataset(_config_without_subset(config), split, eval_transform)
+    dataset = build_dataset(config, split, eval_transform)
     dataloader = build_dataloader(dataset, config.training.batch_size, config.training.num_workers, False, device)
     model = PrototypicalNetwork(build_model(config.model)).to(device)
     checkpoint_path = Path(config.analysis.checkpoint_dir) / f"seed_{seed}" / "checkpoint_best.pt"
@@ -44,15 +44,5 @@ def main() -> None:
     metrics = compute_embedding_metrics(embeddings, labels)
     metrics["seed"] = seed
     write_json(metrics, run_directory / "test_metrics.json")
-
-
-def _config_without_subset(config):
-    import copy
-
-    clone = copy.deepcopy(config)
-    clone.subset.enabled = False
-    return clone
-
-
 if __name__ == "__main__":
     main()

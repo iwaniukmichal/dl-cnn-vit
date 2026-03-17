@@ -10,13 +10,19 @@ from torch.utils.data import Dataset, Subset
 from archdyn.config import RunConfig
 
 
-def _manifest_path(config: RunConfig) -> Path:
+def _manifest_path(config: RunConfig, split: str) -> Path:
     manifest_name = config.subset.manifest_name or f"{config.experiment_name}_{int(config.subset.fraction * 100)}.txt"
-    return Path(config.paths.subset_root) / manifest_name
+    base_path = Path(config.paths.subset_root) / manifest_name
+    suffix = base_path.suffix
+    if suffix:
+        split_name = f"{base_path.stem}_{split}{suffix}"
+    else:
+        split_name = f"{base_path.name}_{split}"
+    return base_path.with_name(split_name)
 
 
-def load_or_create_manifest(config: RunConfig, dataset) -> list[str]:
-    path = _manifest_path(config)
+def load_or_create_manifest(config: RunConfig, dataset, split: str) -> list[str]:
+    path = _manifest_path(config, split)
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists():
         return path.read_text(encoding="utf-8").splitlines()

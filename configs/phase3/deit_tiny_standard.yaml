@@ -8,9 +8,9 @@ dataset:
   input_size: 224
 subset:
   enabled: true
-  fraction: 0.1
+  fraction: 0.05
   class_balanced: true
-  manifest_name: phase3_train10.txt
+  manifest_name: phase3_subset05.txt
 model:
   family: vit
   name: deit_tiny

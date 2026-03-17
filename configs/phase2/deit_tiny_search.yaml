@@ -9,9 +9,9 @@ dataset:
   num_classes: 10
 subset:
   enabled: true
-  fraction: 0.1
+  fraction: 0.05
   class_balanced: true
-  manifest_name: phase2_train10_deit_tiny.txt
+  manifest_name: phase2_subset05_deit_tiny.txt
 model:
   family: vit
   name: deit_tiny

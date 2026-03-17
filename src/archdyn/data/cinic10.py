@@ -17,8 +17,8 @@ def split_path(config: RunConfig, split: str) -> Path:
 
 def build_dataset(config: RunConfig, split: str, transform) -> Dataset:
     dataset = ImageFolder(split_path(config, split), transform=transform)
-    if split == config.dataset.train_split and config.subset.enabled:
-        manifest = load_or_create_manifest(config, dataset)
+    if config.subset.enabled:
+        manifest = load_or_create_manifest(config, dataset, split)
         return subset_from_manifest(dataset, manifest)
     return dataset
 

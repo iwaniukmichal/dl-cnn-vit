@@ -541,7 +541,7 @@ Before moving to Phase 3 and Phase 4:
    - `configs/phase3/*.yaml` for the matching backbone
    - `configs/phase4/protonet_*.yaml` for the matching backbone
    - `configs/phase4/reduced_supervised_*.yaml` for the matching backbone
-4. If you change `subset.fraction`, also update `subset.manifest_name` so the manifest name matches the selected fraction in every config that shares that subset.
+4. If you change `subset.fraction`, also update `subset.manifest_name` so the base manifest name matches the selected fraction in every config that shares that subset. The code now creates separate `<name>_train.txt`, `<name>_valid.txt`, and `<name>_test.txt` manifests per split.
 
 ### 4. Run Phase 3 augmentation experiments
 
@@ -563,7 +563,7 @@ Repeat the full Phase 3 matrix with `--seed 37` and `--seed 73`, then aggregate 
 python -m archdyn.cli.aggregate --output-root outputs --phase phase3
 ```
 
-The provided Phase 3 configs now use a shared deterministic `10%` class-balanced training subset via `subset.enabled: true`, `subset.fraction: 0.1`, and `subset.manifest_name: phase3_train10.txt`.
+The provided Phase 3 configs now use a shared deterministic `5%` class-balanced subset on train, validation, and test via `subset.enabled: true`, `subset.fraction: 0.05`, and `subset.manifest_name: phase3_subset05.txt`.
 
 Before moving to the few-shot, reduced-data supervised, analysis, and ensemble steps:
 

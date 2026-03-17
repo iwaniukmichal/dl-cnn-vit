@@ -117,7 +117,9 @@ def test_search_cli_runs_reduced_grid_and_saves_results(
     _run_cli(search, config_path, monkeypatch)
 
     search_run_dir = output_root / "phase2" / "efficientnet_search_smoke" / "seed_13"
-    assert (manifest_root / "search_subset.txt").exists()
+    assert (manifest_root / "search_subset_train.txt").exists()
+    assert (manifest_root / "search_subset_valid.txt").exists()
+    assert (manifest_root / "search_subset_test.txt").exists()
     assert (search_run_dir / "search_results.csv").exists()
     assert (search_run_dir / "best_config.yaml").exists()
 
@@ -168,6 +170,9 @@ def test_fewshot_and_embedding_analysis_clis_run_end_to_end(
     fewshot_run_dir = output_root / "phase4" / "fewshot_smoke" / "seed_13"
     assert (fewshot_run_dir / "checkpoint_best.pt").exists()
     assert (fewshot_run_dir / "test_metrics.json").exists()
+    assert (manifest_root / "fewshot_subset_train.txt").exists()
+    assert (manifest_root / "fewshot_subset_valid.txt").exists()
+    assert (manifest_root / "fewshot_subset_test.txt").exists()
 
     analysis_config = _base_config("embedding_analysis", "analysis", "embedding_smoke", tiny_cinic10, output_root, manifest_root)
     analysis_config["model"] = {

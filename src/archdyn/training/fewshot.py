@@ -33,8 +33,8 @@ def run_fewshot_experiment(config: RunConfig) -> dict:
 
     _status("Building datasets")
     train_dataset = build_dataset(config, config.dataset.train_split, train_transform)
-    val_dataset = build_dataset(_without_subset(config), config.dataset.val_split, eval_transform)
-    test_dataset = build_dataset(_without_subset(config), config.dataset.test_split, eval_transform)
+    val_dataset = build_dataset(config, config.dataset.val_split, eval_transform)
+    test_dataset = build_dataset(config, config.dataset.test_split, eval_transform)
     _status(
         f"Datasets ready: train={len(train_dataset)} val={len(val_dataset)} test={len(test_dataset)} "
         f"episodes(train/val/test)={config.fewshot.train_episodes}/{config.fewshot.val_episodes}/{config.fewshot.test_episodes}"
@@ -199,12 +199,6 @@ def run_episode_epoch(
         losses.append(float(loss.item()))
         accuracies.append(_episode_accuracy(logits.detach(), query_labels_a, query_labels_b, lam))
     return float(np.mean(losses)), float(np.mean(accuracies))
-
-
-def _without_subset(config: RunConfig) -> RunConfig:
-    clone = copy.deepcopy(config)
-    clone.subset.enabled = False
-    return clone
 
 
 def _build_grad_scaler(device: torch.device, amp_enabled: bool):
