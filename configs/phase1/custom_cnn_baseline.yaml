@@ -11,11 +11,6 @@ dataset:
   test_split: test
   input_size: 32
   num_classes: 10
-subset:
-  enabled: true
-  fraction: 0.05
-  class_balanced: true
-  manifest_name: phase1_subset05.txt
 model:
   family: custom_cnn
   name: custom_cnn

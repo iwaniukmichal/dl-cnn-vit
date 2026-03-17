@@ -123,7 +123,7 @@ Summarize the concrete capabilities the codebase must support.
 List only tools/libraries that are genuinely needed and briefly justify each one.
 
 ### 5. Repository structure
-Provide a concrete, minimal repository tree and briefly explain each top-level directory and file. Prefer `src/` for the system implementation, `output/` directory for output files of experiments, keep `README.md` in the repository root, and include only folders/resources that are justified by the project scope and common best practices.
+Provide a concrete, minimal repository tree and briefly explain each top-level directory and file. Prefer `src/` for the system implementation, `outputs/` directory for output files of experiments, keep `README.md` in the repository root, and include only folders/resources that are justified by the project scope and common best practices.
 
 ### 6. Core modules and responsibilities
 For each core module, explain:
