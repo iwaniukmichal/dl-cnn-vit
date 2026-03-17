@@ -27,7 +27,7 @@ scheduler:
 training:
   epochs: 5
   batch_size: 64
-  num_workers: 8
+  num_workers: 4
   device: auto
 augmentation:
   name: baseline
