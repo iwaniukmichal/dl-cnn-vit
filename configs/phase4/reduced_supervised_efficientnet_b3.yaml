@@ -8,7 +8,7 @@ dataset:
   input_size: 300
 subset:
   enabled: true
-  fraction: 1.0
+  fraction: 0.1
   class_balanced: true
   manifest_name: phase4_subset01_efficientnet_b3.txt
 model:

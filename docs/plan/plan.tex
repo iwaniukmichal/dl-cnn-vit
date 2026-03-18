@@ -79,7 +79,7 @@ DeiT-Tiny  & Full training set & AdamW, literature-based LR & 3 \\
 
 \subsection{Phase 2: Hyperparameter Optimization}
 
-Next, we want to find the best hyperparameter settings for each architecture. To keep this computationally manageable, we will perform a grid search using a reduced portion of the training data (around 10--20\%) while still being able to capture interactions between different hyperparameters. Since CNNs and Vision Transformers have different training characteristics, we will use separate hyperparameter grids for each architecture type, guided by findings in the literature.
+Next, we want to find the best hyperparameter settings for each architecture. To keep this computationally manageable, we will perform a grid search using a reduced portion of the training data (5\%) while still being able to capture interactions between different hyperparameters. Since CNNs and Vision Transformers have different training characteristics, we will use separate hyperparameter grids for each architecture type, guided by findings in the literature.
 
 We will vary four key training settings, with architecture-specific ranges (see Tables~\ref{tab:hp_resnet} and \ref{tab:hp_deit}):
 
@@ -119,7 +119,7 @@ With four hyperparameters and two options each, this creates a $2^4$ grid of 16 
 
 \subsection{Phase 3: Data Augmentation Analysis}
 
-In this phase, we take the best hyperparameters found in Phase 2 for each architecture and evaluate how different augmentation strategies affect performance when training on the full dataset. We will test several combinations of augmentation techniques (see Table~\ref{tab:aug_strategies}):
+In this phase, we take the best hyperparameters found in Phase 2 for each architecture and evaluate how different augmentation strategies affect performance when training on the 5\% of dataset. We will test several combinations of augmentation techniques (see Table~\ref{tab:aug_strategies}):
 
 \begin{table}[H]
 \centering
@@ -137,13 +137,13 @@ Combined & Standard + advanced techniques & both\\
 \end{tabular}
 \end{table}
 
-Each configuration will use 3 seeds. This will help us understand which augmentation strategies help the most, and whether the two architectures prefer different augmentation approaches. The best augmentation strategy for each model will be carried forward to Phase 4.
+Each configuration will use 3 seeds. This will help us understand which augmentation strategies help the most, and whether the two architectures prefer different augmentation approaches.
 
 \subsection{Phase 4: Few-Shot Learning and Embedding Space Analysis}
 
 \subsubsection{Few-Shot Learning with Different Augmentation Strategies}
 
-We will reduce the training dataset significantly to simulate the challenging scenario of learning from very limited data. We will then train using Prototypical Networks with different backbone architectures (ResNet-18 and DeiT-Tiny) and different augmentation strategies from Phase 3. Each configuration will use 3 random seeds (see Table~\ref{tab:fewshot_experiments}).
+We will reduce the training dataset significantly (10\%) to simulate the challenging scenario of learning from very limited data. We will then train using Prototypical Networks with different backbone architectures (ResNet-18 and DeiT-Tiny) and different augmentation strategies from Phase 3. Each configuration will use 3 random seeds (see Table~\ref{tab:fewshot_experiments}).
 
 \begin{table}[H]
 \centering
@@ -165,7 +165,7 @@ Combined & DeiT-Tiny & Reduced & 3 \\
 \end{tabular}
 \end{table}
 
-For the episodic training, we will perform a 10-way classification task where the model must distinguish between some number of examples from each of the 10 classes, with queries used to evaluate performance. We will run a sufficiently large number of episodes during training to ensure stable learning.
+For the episodic training, we will perform a 5-way classification task where the model must distinguish between some number of examples from each of the 5 classes, with queries used to evaluate performance. We will run a sufficiently large number of episodes during training to ensure stable learning.
 
 \subsubsection{Quantitative Analysis of Learned Representations}
 
@@ -187,7 +187,7 @@ By comparing these embedding metrics across different augmentation strategies an
 
 \subsubsection{Comparison with Standard Training}
 
-As a sanity check, we will also train both architectures on the reduced dataset using standard supervised learning (not few-shot episodic training) with the best augmentation strategy and hyperparameters found in Phase 3. This lets us compare how the few-shot approach performs relative to a conventional training pipeline under the same data scarcity constraint, as summarized in Table~\ref{tab:standard_training}.
+As a sanity check, we will also train both architectures on the reduced dataset (10\%) and not reduced full dataset, using standard supervised learning with the best augmentation strategy and hyperparameters found in Phase 3 and 2. This lets us compare how the few-shot approach performs relative to a conventional training pipeline under the same data scarcity constraint, as summarized in Table~\ref{tab:standard_training}.
 
 \begin{table}[H]
 \centering
@@ -197,8 +197,10 @@ As a sanity check, we will also train both architectures on the reduced dataset 
 \toprule
 \textbf{Training Method} & \textbf{Backbone} & \textbf{Reduced Data} & \textbf{Seeds} \\
 \midrule
-Standard supervised & ResNet-18 & Reduced & 3 \\
-Standard supervised & DeiT-Tiny & Reduced & 3 \\
+Standard supervised best params & ResNet-18 & Reduced & 3 \\
+Standard supervised best params & DeiT-Tiny & Reduced & 3 \\
+Standard supervised best params & ResNet-18 & Not-Reduced & 3 \\
+Standard supervised best params & DeiT-Tiny & Not-Reduced & 3 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -219,60 +221,11 @@ The main questions we want to answer through Phase 4 are:
 
 \subsection{Ensemble Learning Extension}
 
-In addition to evaluating the individual performance of ResNet-18 and DeiT-Tiny, we introduce ensemble methods to investigate whether combining CNN and Vision Transformer representations leads to improved performance. For all ensemble experiments, we use the best-performing model configurations identified in Phase 2 and Phase 3.
+In addition to evaluating the individual performance of ResNet-18 and DeiT-Tiny, we introduce ensemble methods to investigate whether combining CNN and Vision Transformer representations leads to improved performance. For ensemble experiments, we use our theoretically best model i.e. Standard supervised best params model on full data (from phase 4).
 
 First, we apply \textbf{soft voting} at the prediction level. For each input sample, we average the softmax probability outputs of the optimized ResNet-18 and DeiT-Tiny models and select the final class based on the highest averaged probability.
 
 Second, we implement a \textbf{stacking strategy at the embedding level}. We concatenate the learned embeddings from the optimized ResNet-18 and DeiT-Tiny models and train a logistic regression classifier on top of the combined representation. The backbone models remain frozen during this stage, and only the logistic regression layer is trained.
 
 
-\section{Division of Work}
-
-The general division of responsibilities between team members is presented in Table~\ref{tab:responsibilities}.
-
-\begin{table}[H]
-\centering
-\caption{General division of responsibilities between team members.}
-\label{tab:responsibilities}
-\begin{tabular}{@{}p{0.32\textwidth}p{0.32\textwidth}p{0.32\textwidth}@{}}
-\toprule
-\textbf{Area} & \textbf{Bart\l{}omiej Borycki} & \textbf{Micha\l{} Iwaniuk} \\
-\midrule
-
-Project setup
-& Experiment structure, reproducibility, logging framework
-& Data preparation, training environment \\
-
-\addlinespace
-
-Phases 1--2 (Baselines \& Hyperparameters)
-& CNN-focused experiments and analysis
-& Vision Transformer experiments and analysis \\
-
-\addlinespace
-
-Phase 3 (Augmentation Study)
-& Augmentation experiments for CNN models
-& Augmentation experiments for ViT models \\
-
-\addlinespace
-
-Phase 4 (Few-shot Learning)
-& Prototypical Networks with DeiT-Tiny backbone 
-& Prototypical Networks with ResNet-18 backbone \\
-
-\addlinespace
-
-Embedding Analysis \& Evaluation
-& Quantitative clustering metrics and comparisons
-& Visualization of embedding spaces and interpretation \\
-
-\addlinespace
-
-\midrule
-Shared responsibilities
-& \multicolumn{2}{p{0.64\textwidth}}{Experiment planning and final writing of the report.} \\
-\bottomrule
-\end{tabular}
-\end{table}
 \end{document}

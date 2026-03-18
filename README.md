@@ -507,6 +507,8 @@ Put CINIC-10 under `data/cinic10/`.
 
 ### 2. Run Phase 1 baselines
 
+On full data
+
 ```bash
 python -m archdyn.cli.train --config configs/phase1/custom_cnn_baseline.yaml --seed 13
 python -m archdyn.cli.train --config configs/phase1/efficientnet_b3_baseline.yaml --seed 13
@@ -520,6 +522,8 @@ python -m archdyn.cli.aggregate --output-root outputs --phase phase1
 ```
 
 ### 3. Run Phase 2 hyperparameter search
+
+On 5% of data
 
 ```bash
 python -m archdyn.cli.search --config configs/phase2/efficientnet_b3_search.yaml --seed 13
@@ -540,10 +544,11 @@ Before moving to Phase 3 and Phase 4:
 3. Manually copy the winning `lr`, `weight_decay`, `scheduler`, and `drop_path` into:
    - `configs/phase3/*.yaml` for the matching backbone
    - `configs/phase4/protonet_*.yaml` for the matching backbone
-   - `configs/phase4/reduced_supervised_*.yaml` for the matching backbone
-4. If you change `subset.fraction`, also update `subset.manifest_name` so the base manifest name matches the selected fraction in every config that shares that subset. The code now creates separate `<name>_train.txt`, `<name>_valid.txt`, and `<name>_test.txt` manifests per split.
+   - `configs/phase4/(not)_reduced_supervised_*.yaml` for the matching backbone
 
 ### 4. Run Phase 3 augmentation experiments
+
+On 5% of data
 
 ```bash
 python -m archdyn.cli.train --config configs/phase3/efficientnet_b3_baseline.yaml --seed 13
@@ -563,9 +568,8 @@ Repeat the full Phase 3 matrix with `--seed 37` and `--seed 73`, then aggregate 
 python -m archdyn.cli.aggregate --output-root outputs --phase phase3
 ```
 
-The provided Phase 3 configs now use a shared deterministic `5%` class-balanced subset on train, validation, and test via `subset.enabled: true`, `subset.fraction: 0.05`, and `subset.manifest_name: phase3_subset05.txt`.
 
-Before moving to the few-shot, reduced-data supervised, analysis, and ensemble steps:
+Before moving to the few-shot, (not)_reduced-data supervised, analysis, and ensemble steps:
 
 1. Compare `outputs/phase3/<experiment>/aggregate/metrics_mean_std.json` across experiments and pick the best augmentation strategy per backbone from the aggregated multi-seed results.
 2. Keep the full augmentation matrix for few-shot:
@@ -578,10 +582,8 @@ Before moving to the few-shot, reduced-data supervised, analysis, and ensemble s
    - `optimizer.weight_decay`
    - `scheduler`
    - `model.drop_path`
-4. Use the winning Phase 3 augmentation when preparing reduced supervised comparisons, and when choosing which checkpoint lineage should be treated as the main downstream reference.
-5. Update downstream checkpoint references when needed:
-   - set `analysis.checkpoint_dir` in `configs/analysis/embeddings_*.yaml` to `outputs/phase4/<selected_fewshot_experiment>`
-   - set `ensemble.cnn_checkpoint_dir` and `ensemble.vit_checkpoint_dir` in `configs/ensembles/supervised_best_models.yaml` to the selected Phase 3 experiment directories under `outputs/phase3/`
+4. Use the winning Phase 3 augmentation when preparing (not)reduced supervised comparisons, and when choosing which checkpoint lineage should be treated as the main downstream reference.
+
 
 ### 5. Run Phase 4 few-shot experiments
 
@@ -597,16 +599,18 @@ python -m archdyn.cli.fewshot --config configs/phase4/protonet_deit_tiny_advance
 python -m archdyn.cli.fewshot --config configs/phase4/protonet_deit_tiny_combined.yaml --seed 13
 ```
 
-Notes:
+5. Update downstream checkpoint references when needed:
+   - set `analysis.checkpoint_dir` in `configs/analysis/embeddings_*.yaml` to `outputs/phase4/<best_fewshot_experiment>`
+   - set `ensemble.cnn_checkpoint_dir` and `ensemble.vit_checkpoint_dir` in `configs/ensembles/supervised_best_models.yaml` to the selected Phase 4 experiment directories under `outputs/phase4/` - not reduced experiments with best augmentation (phase3) and hyperparameters (phase2)
 
-- The provided few-shot configs are `5-way, 5-shot, 15-query`.
-- `advanced` and `combined` few-shot configs can now use `cutmix_alpha` during training.
-
-### 6. Run reduced-data supervised comparisons
+### 6. Run reduced-data and notreduced supervised comparisons
 
 ```bash
 python -m archdyn.cli.train --config configs/phase4/reduced_supervised_efficientnet_b3.yaml --seed 13
 python -m archdyn.cli.train --config configs/phase4/reduced_supervised_deit_tiny.yaml --seed 13
+
+python -m archdyn.cli.train --config configs/phase4/not_reduced_supervised_efficientnet_b3.yaml --seed 13
+python -m archdyn.cli.train --config configs/phase4/not_reduced_supervised_deit_tiny.yaml --seed 13
 ```
 
 Repeat Phase 4 few-shot and reduced supervised runs with `--seed 37` and `--seed 73`, then aggregate Phase 4 before comparing few-shot against reduced supervised baselines:
@@ -629,6 +633,7 @@ python -m archdyn.cli.aggregate --output-root outputs --phase analysis
 ```
 
 ### 8. Run ensemble evaluation
+
 
 ```bash
 python -m archdyn.cli.ensemble --config configs/ensembles/supervised_best_models.yaml --seed 13
