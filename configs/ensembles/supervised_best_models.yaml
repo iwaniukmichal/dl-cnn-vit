@@ -15,8 +15,8 @@ training:
   batch_size: 64
   num_workers: 4
 ensemble:
-  cnn_checkpoint_dir: outputs/phase3/efficientnet_b3_combined
-  vit_checkpoint_dir: outputs/phase3/deit_tiny_combined
+  cnn_checkpoint_dir: outputs/phase3/efficientnet_b3_advanced
+  vit_checkpoint_dir: outputs/phase3/deit_tiny_advanced
   cnn_input_size: 300
   vit_input_size: 224
   meta_split: valid

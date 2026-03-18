@@ -16,11 +16,11 @@ model:
   name: deit_tiny
   pretrained: true
   num_classes: 10
-  drop_path: 0.1
+  drop_path: 0.0
 optimizer:
   name: adamw
-  lr: 0.00005
-  weight_decay: 0.05
+  lr: 0.0002
+  weight_decay: 0.1
 scheduler:
   name: cosine
 training:

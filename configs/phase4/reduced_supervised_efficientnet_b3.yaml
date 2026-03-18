@@ -19,7 +19,7 @@ model:
   drop_path: 0.1
 optimizer:
   name: adamw
-  lr: 0.001
+  lr: 0.0003
   weight_decay: 0.0005
 scheduler:
   name: cosine
@@ -28,5 +28,5 @@ training:
   batch_size: 64
   num_workers: 4
 augmentation:
-  name: combined
+  name: advanced
   cutmix_alpha: 1.0
