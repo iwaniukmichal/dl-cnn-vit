@@ -1,0 +1,11 @@
+{
+  "config_id": "deit_tiny_search_cfg_14",
+  "lr": 0.0002,
+  "scheduler": "cosine",
+  "drop_path": 0.0,
+  "weight_decay": 0.1,
+  "val_accuracy_mean": 0.8134074074074075,
+  "val_accuracy_std": 0.005675737112441679,
+  "test_accuracy_mean": 0.8101481481481482,
+  "test_accuracy_std": 0.007063498008439315
+}

@@ -1,0 +1,11 @@
+{
+  "config_id": "efficientnet_b3_search_cfg_08",
+  "lr": 0.0003,
+  "scheduler": "cosine",
+  "drop_path": 0.1,
+  "weight_decay": 0.0005,
+  "val_accuracy_mean": 0.855111111111111,
+  "val_accuracy_std": 0.0016024672335395065,
+  "test_accuracy_mean": 0.8565185185185186,
+  "test_accuracy_std": 0.0020163937168616317
+}
