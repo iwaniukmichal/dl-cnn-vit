@@ -14,7 +14,7 @@ Use an already implemented repository and README to:
 3. collect the metrics/artifacts produced by the user,
 4. and write the final project report into `docs/report/report.tex`.
 
-The report must present **insight, not raw data**. Every table, figure reference, and written paragraph should communicate a conclusion, comparison, or interpretation grounded in the discovered artifacts.
+The report must present **insight, not raw data**. Every table, figure reference, and written paragraph should communicate a conclusion, comparison, or interpretation grounded in the discovered artifacts. Moreover every experiment that has been conducted must be documented in the report. 
 
 The report should be treated as a **complete research study**, not as a template to be mechanically filled with the user's produced results. In addition to reporting empirical outputs, it must include the necessary background, methodological framing, theoretical motivation, and discussion expected in a serious academic report. Filling the report may therefore require additional focused research on the relevant methods, publications, baselines, and theoretical foundations.
 
@@ -73,3 +73,7 @@ For **what actually happened**, use only the actual artifacts found in `outputs/
 
 10. **Perform additional research when needed to complete the study.**
    If the report requires method descriptions, theoretical explanations, literature context, or publication-backed framing that is not already present in the repository, perform focused additional research and incorporate it into the report. Use such research to support background and interpretation sections, while keeping all quantitative experimental claims grounded strictly in the discovered artifacts.
+
+ 11. **All experiments must be explicitly reported.**
+   Every experiment that has been conducted must be documented in the report. This includes a clear description of the experimental setup and experiment-specific configurations and hyperparameters in a concise and structured form, preferably as a table summarizing key settings and/or text description. The report therefore serves as the single source of truth for all experimental work.
+

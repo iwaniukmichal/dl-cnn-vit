@@ -8,7 +8,7 @@ dataset:
   input_size: 224
 subset:
   enabled: true
-  fraction: 0.01
+  fraction: 0.1
   class_balanced: true
   manifest_name: phase4_subset01_deit_tiny.txt
 model:

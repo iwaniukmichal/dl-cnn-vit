@@ -5,10 +5,11 @@ import copy
 import numpy as np
 import pandas as pd
 import torch
+from torch.utils.data import DataLoader
 
 from archdyn.config import RunConfig
-from archdyn.data.cinic10 import build_dataset
-from archdyn.data.episodic import EpisodeSampler
+from archdyn.data.cinic10 import build_dataset, resolve_num_workers
+from archdyn.data.episodic import EpisodeDataset, EpisodeSampler
 from archdyn.data.transforms import build_supervised_transforms
 from archdyn.evaluation.metrics import accuracy_from_logits
 from archdyn.models.pretrained import build_model
@@ -44,6 +45,28 @@ def run_fewshot_experiment(config: RunConfig) -> dict:
     train_sampler = EpisodeSampler(train_dataset, config.fewshot, seed)
     val_sampler = EpisodeSampler(val_dataset, config.fewshot, seed + 1)
     test_sampler = EpisodeSampler(test_dataset, config.fewshot, seed + 2)
+    _status("Building episode dataloaders")
+    train_loader = build_episode_dataloader(
+        train_sampler,
+        config.fewshot.train_episodes * config.training.epochs,
+        config.training.num_workers,
+        device,
+    )
+    val_loader = build_episode_dataloader(
+        val_sampler,
+        config.fewshot.val_episodes * config.training.epochs,
+        config.training.num_workers,
+        device,
+    )
+    test_loader = build_episode_dataloader(
+        test_sampler,
+        config.fewshot.test_episodes,
+        config.training.num_workers,
+        device,
+    )
+    train_iterator = iter(train_loader)
+    val_iterator = iter(val_loader)
+    test_iterator = iter(test_loader)
 
     _status(f"Building backbone and prototypical network: name={config.model.name}")
     backbone = build_model(config.model)
@@ -61,7 +84,7 @@ def run_fewshot_experiment(config: RunConfig) -> dict:
     for epoch in range(1, config.training.epochs + 1):
         train_loss, train_accuracy = run_episode_epoch(
             model,
-            train_sampler,
+            train_iterator,
             config.fewshot.train_episodes,
             optimizer,
             device,
@@ -75,7 +98,7 @@ def run_fewshot_experiment(config: RunConfig) -> dict:
         )
         val_loss, val_accuracy = run_episode_epoch(
             model,
-            val_sampler,
+            val_iterator,
             config.fewshot.val_episodes,
             optimizer,
             device,
@@ -111,7 +134,7 @@ def run_fewshot_experiment(config: RunConfig) -> dict:
     _status("Evaluating best model on test episodes")
     test_loss, test_accuracy = run_episode_epoch(
         model,
-        test_sampler,
+        test_iterator,
         config.fewshot.test_episodes,
         optimizer,
         device,
@@ -142,7 +165,7 @@ def run_fewshot_experiment(config: RunConfig) -> dict:
 
 def run_episode_epoch(
     model,
-    sampler: EpisodeSampler,
+    episode_iterator,
     num_episodes: int,
     optimizer,
     device: torch.device,
@@ -161,7 +184,7 @@ def run_episode_epoch(
     else:
         model.eval()
     for _ in range(num_episodes):
-        episode = sampler.sample_episode()
+        episode = next(episode_iterator)
         support_images = episode["support_images"].to(device, non_blocking=device.type == "cuda")
         support_labels = episode["support_labels"].to(device, non_blocking=device.type == "cuda")
         query_images = episode["query_images"].to(device, non_blocking=device.type == "cuda")
@@ -205,6 +228,27 @@ def _build_grad_scaler(device: torch.device, amp_enabled: bool):
     if hasattr(torch, "amp") and hasattr(torch.amp, "GradScaler"):
         return torch.amp.GradScaler(device.type, enabled=amp_enabled)
     return torch.cuda.amp.GradScaler(enabled=amp_enabled and device.type == "cuda")
+
+
+def build_episode_dataloader(
+    sampler: EpisodeSampler,
+    total_episodes: int,
+    num_workers: int,
+    device: torch.device,
+) -> DataLoader:
+    resolved_workers = resolve_num_workers(num_workers)
+    use_cuda = device.type == "cuda"
+    loader_kwargs = {
+        "dataset": EpisodeDataset(sampler, total_episodes),
+        "batch_size": None,
+        "shuffle": False,
+        "num_workers": resolved_workers,
+        "pin_memory": use_cuda,
+    }
+    if resolved_workers > 0:
+        loader_kwargs["persistent_workers"] = True
+        loader_kwargs["prefetch_factor"] = 2
+    return DataLoader(**loader_kwargs)
 
 
 def _episode_accuracy(
