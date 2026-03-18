@@ -1,0 +1,6 @@
+{
+  "accuracy": 0.794,
+  "macro_f1": 0.7946658373216055,
+  "seed": 13,
+  "best_val_accuracy": 0.78
+}
