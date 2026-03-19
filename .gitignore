@@ -15,3 +15,4 @@ docs/plan/*.out
 docs/plan/*.pdf
 docs/plan/*.synctex.gz
 .token*
+outputs/**/*.pt
