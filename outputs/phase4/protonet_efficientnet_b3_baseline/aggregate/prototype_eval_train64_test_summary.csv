@@ -1,0 +1,4 @@
+accuracy,macro_f1,seed,support_split,eval_split,support_samples_per_class,prototype_classes,checkpoint_path,loss
+0.8597777777777778,0.8596990208334336,13,train,test,64,10,outputs/phase4/protonet_efficientnet_b3_baseline/seed_13/checkpoint_best.pt,0.525805737345202
+0.8686666666666667,0.8684085343342941,37,train,test,64,10,outputs/phase4/protonet_efficientnet_b3_baseline/seed_37/checkpoint_best.pt,0.5137330097615296
+0.8641111111111112,0.8636664122423886,73,train,test,64,10,outputs/phase4/protonet_efficientnet_b3_baseline/seed_73/checkpoint_best.pt,0.5413282701600317

@@ -1,0 +1,11 @@
+{
+  "accuracy": 0.8563333333333333,
+  "macro_f1": 0.8560961641529155,
+  "seed": 37,
+  "support_split": "train",
+  "eval_split": "test",
+  "support_samples_per_class": 64,
+  "prototype_classes": 10,
+  "checkpoint_path": "outputs/phase4/protonet_efficientnet_b3_standard/seed_37/checkpoint_best.pt",
+  "loss": 0.5111308358609676
+}

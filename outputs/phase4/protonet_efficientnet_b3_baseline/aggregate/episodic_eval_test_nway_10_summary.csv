@@ -1,0 +1,4 @@
+seed,split,train_n_way,eval_n_way,k_shot,q_query,episodes,checkpoint_path,loss,accuracy
+13,test,5,10,5,10,200,outputs/phase4/protonet_efficientnet_b3_baseline/seed_13/checkpoint_best.pt,0.49152724858373403,0.8571999794244767
+37,test,5,10,5,10,200,outputs/phase4/protonet_efficientnet_b3_baseline/seed_37/checkpoint_best.pt,0.4799287433922291,0.8632999765872955
+73,test,5,10,5,10,200,outputs/phase4/protonet_efficientnet_b3_baseline/seed_73/checkpoint_best.pt,0.4885571247339249,0.8588499796390533
