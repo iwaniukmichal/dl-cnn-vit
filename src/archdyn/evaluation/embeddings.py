@@ -13,15 +13,23 @@ from sklearn.metrics import davies_bouldin_score, silhouette_score
 from archdyn.evaluation.metrics import distance_ratio
 
 
-def extract_embeddings(model, dataloader, device: torch.device) -> tuple[np.ndarray, np.ndarray]:
+def extract_embeddings(
+    model,
+    dataloader,
+    device: torch.device,
+    progress_label: str | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
     dataset_size = len(dataloader.dataset) if hasattr(dataloader, "dataset") else "unknown"
     _status(f"Starting embedding extraction for {dataset_size} samples")
     model.eval()
     embeddings = []
     labels = []
-    with torch.no_grad():
-        for images, batch_labels in dataloader:
-            images = images.to(device)
+    total_batches = len(dataloader) if hasattr(dataloader, "__len__") else None
+    with torch.inference_mode():
+        for batch_index, (images, batch_labels) in enumerate(dataloader, start=1):
+            if progress_label is not None:
+                _log_batch_progress(progress_label, batch_index, total_batches)
+            images = images.to(device, non_blocking=device.type == "cuda")
             batch_embeddings = model.embed(images) if hasattr(model, "embed") else model.forward_features(images)
             embeddings.append(batch_embeddings.cpu().numpy())
             labels.append(batch_labels.numpy())
@@ -136,3 +144,8 @@ def _heatmap_plot(matrix: np.ndarray, class_ids: list[int], destination: Path) -
 
 def _status(message: str) -> None:
     print(f"[embeddings] {message}", flush=True)
+
+
+def _log_batch_progress(label: str, batch_index: int, total_batches: int | None) -> None:
+    batch_suffix = f"/{total_batches}" if total_batches is not None else ""
+    _status(f"{label}: batch {batch_index}{batch_suffix}")

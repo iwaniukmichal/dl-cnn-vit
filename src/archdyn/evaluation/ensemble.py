@@ -12,13 +12,21 @@ from archdyn.evaluation.metrics import classification_metrics
 from archdyn.paths import write_json
 
 
-def predict_probabilities(model, dataloader, device: torch.device) -> tuple[np.ndarray, np.ndarray]:
+def predict_probabilities(
+    model,
+    dataloader,
+    device: torch.device,
+    progress_label: str | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
     model.eval()
     probabilities = []
     labels = []
-    with torch.no_grad():
-        for images, batch_labels in dataloader:
-            images = images.to(device)
+    total_batches = len(dataloader) if hasattr(dataloader, "__len__") else None
+    with torch.inference_mode():
+        for batch_index, (images, batch_labels) in enumerate(dataloader, start=1):
+            if progress_label is not None:
+                _status(_batch_progress_message(progress_label, batch_index, total_batches))
+            images = images.to(device, non_blocking=device.type == "cuda")
             logits = model(images)
             probabilities.append(torch.softmax(logits, dim=1).cpu().numpy())
             labels.append(batch_labels.numpy())
@@ -26,8 +34,8 @@ def predict_probabilities(model, dataloader, device: torch.device) -> tuple[np.n
 
 
 def soft_voting(cnn_model, vit_model, cnn_dataloader, vit_dataloader, device: torch.device) -> tuple[dict[str, float], np.ndarray]:
-    cnn_probs, labels = predict_probabilities(cnn_model, cnn_dataloader, device)
-    vit_probs, vit_labels = predict_probabilities(vit_model, vit_dataloader, device)
+    cnn_probs, labels = predict_probabilities(cnn_model, cnn_dataloader, device, progress_label="soft voting CNN")
+    vit_probs, vit_labels = predict_probabilities(vit_model, vit_dataloader, device, progress_label="soft voting ViT")
     _assert_matching_labels(labels, vit_labels)
     blended = (cnn_probs + vit_probs) / 2
     predictions = blended.argmax(axis=1)
@@ -51,6 +59,7 @@ def stacking(
         cnn_meta_dataloader,
         vit_meta_dataloader,
         device,
+        progress_label="stacking meta",
     )
     eval_features, eval_labels = _concatenated_embeddings(
         cnn_model,
@@ -58,6 +67,7 @@ def stacking(
         cnn_eval_dataloader,
         vit_eval_dataloader,
         device,
+        progress_label="stacking eval",
     )
     classifier = LogisticRegression(
         max_iter=500,
@@ -80,8 +90,18 @@ def protonet_logistic_regression(
     c_value: float,
     output_dir: Path,
 ) -> dict[str, float]:
-    meta_features, meta_labels = extract_embeddings(protonet_model, meta_dataloader, device)
-    eval_features, eval_labels = extract_embeddings(protonet_model, eval_dataloader, device)
+    meta_features, meta_labels = extract_embeddings(
+        protonet_model,
+        meta_dataloader,
+        device,
+        progress_label="protonet logreg meta",
+    )
+    eval_features, eval_labels = extract_embeddings(
+        protonet_model,
+        eval_dataloader,
+        device,
+        progress_label="protonet logreg eval",
+    )
     classifier = LogisticRegression(
         max_iter=500,
         C=c_value,
@@ -105,15 +125,26 @@ def _concatenated_embeddings(
     cnn_dataloader,
     vit_dataloader,
     device: torch.device,
+    progress_label: str | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
+    cnn_model.eval()
+    vit_model.eval()
     cnn_embeddings = []
     vit_embeddings = []
     labels = []
-    with torch.no_grad():
-        for (cnn_images, cnn_labels), (vit_images, vit_labels) in zip(cnn_dataloader, vit_dataloader, strict=True):
+    cnn_total_batches = _dataloader_length(cnn_dataloader)
+    vit_total_batches = _dataloader_length(vit_dataloader)
+    total_batches = min(cnn_total_batches, vit_total_batches) if None not in (cnn_total_batches, vit_total_batches) else None
+    with torch.inference_mode():
+        for batch_index, ((cnn_images, cnn_labels), (vit_images, vit_labels)) in enumerate(
+            zip(cnn_dataloader, vit_dataloader, strict=True),
+            start=1,
+        ):
+            if progress_label is not None:
+                _status(_batch_progress_message(progress_label, batch_index, total_batches))
             _assert_matching_labels(cnn_labels.numpy(), vit_labels.numpy())
-            cnn_images = cnn_images.to(device)
-            vit_images = vit_images.to(device)
+            cnn_images = cnn_images.to(device, non_blocking=device.type == "cuda")
+            vit_images = vit_images.to(device, non_blocking=device.type == "cuda")
             cnn_embeddings.append(cnn_model.forward_features(cnn_images).cpu().numpy())
             vit_embeddings.append(vit_model.forward_features(vit_images).cpu().numpy())
             labels.append(cnn_labels.numpy())
@@ -123,3 +154,16 @@ def _concatenated_embeddings(
 def _assert_matching_labels(labels: np.ndarray, other_labels: np.ndarray) -> None:
     if not np.array_equal(labels, other_labels):
         raise ValueError("CNN and ViT dataloaders must yield samples in identical order")
+
+
+def _dataloader_length(dataloader) -> int | None:
+    return len(dataloader) if hasattr(dataloader, "__len__") else None
+
+
+def _batch_progress_message(label: str, batch_index: int, total_batches: int | None) -> str:
+    batch_suffix = f"/{total_batches}" if total_batches is not None else ""
+    return f"{label}: batch {batch_index}{batch_suffix}"
+
+
+def _status(message: str) -> None:
+    print(f"[ensemble-eval] {message}", flush=True)
