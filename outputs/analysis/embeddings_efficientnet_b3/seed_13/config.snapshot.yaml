@@ -1,0 +1,78 @@
+mode: embedding_analysis
+phase: analysis
+experiment_name: embeddings_efficientnet_b3
+paths:
+  data_root: data/cinic10
+  output_root: outputs
+  subset_root: data/manifests
+dataset:
+  name: cinic10
+  train_split: train
+  val_split: valid
+  test_split: test
+  input_size: 300
+  num_classes: 10
+  normalization: imagenet
+subset:
+  enabled: false
+  fraction: 1.0
+  class_balanced: true
+  manifest_name: null
+seed: 13
+model:
+  family: pretrained_cnn
+  name: efficientnet_b3
+  pretrained: true
+  num_classes: 10
+  drop_path: 0.1
+optimizer:
+  name: adamw
+  lr: 0.0003
+  weight_decay: 0.0001
+scheduler:
+  name: none
+  t_max: null
+training:
+  epochs: 30
+  batch_size: 64
+  num_workers: 4
+  device: auto
+  deterministic: false
+  mixed_precision: true
+  log_every: 20
+augmentation:
+  name: baseline
+  cutmix_alpha: 1.0
+fewshot:
+  n_way: 10
+  k_shot: 5
+  q_query: 15
+  train_episodes: 200
+  val_episodes: 100
+  test_episodes: 200
+outputs:
+  save_checkpoints: true
+  save_predictions: true
+  save_embeddings: true
+analysis:
+  checkpoint_dir: outputs/phase4/protonet_efficientnet_b3_advanced
+  checkpoint_type: fewshot
+  split: test
+  include_train_split: true
+  manifest_name: phase4_subset01_efficientnet_b3.txt
+  samples_per_class: 100
+  max_tsne_samples: 1000
+  enable_tsne: true
+  tsne_random_state: 42
+ensemble:
+  cnn_checkpoint_dir: ''
+  vit_checkpoint_dir: ''
+  protonet_checkpoint_dir: ''
+  cnn_input_size: 300
+  vit_input_size: 224
+  meta_split: valid
+  eval_split: test
+  logistic_regression_c: 1.0
+search:
+  space: {}
+  selection_metric: val_accuracy

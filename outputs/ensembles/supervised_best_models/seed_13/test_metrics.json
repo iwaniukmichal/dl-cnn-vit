@@ -1,0 +1,7 @@
+{
+  "seed": 13,
+  "soft_voting_accuracy": 0.9394444444444444,
+  "soft_voting_macro_f1": 0.9393741315088796,
+  "stacking_accuracy": 0.9276666666666666,
+  "stacking_macro_f1": 0.9276873939569048
+}
