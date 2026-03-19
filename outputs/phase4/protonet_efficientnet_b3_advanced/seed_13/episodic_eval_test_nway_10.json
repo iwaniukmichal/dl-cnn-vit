@@ -1,0 +1,12 @@
+{
+  "seed": 13,
+  "split": "test",
+  "train_n_way": 5,
+  "eval_n_way": 10,
+  "k_shot": 5,
+  "q_query": 10,
+  "episodes": 200,
+  "checkpoint_path": "outputs/phase4/protonet_efficientnet_b3_advanced/seed_13/checkpoint_best.pt",
+  "loss": 0.6645942708849907,
+  "accuracy": 0.8526499798893928
+}
