@@ -668,9 +668,8 @@ python -m archdyn.cli.fewshot_prototype_eval --config configs/phase4/protonet_de
 
 Each run writes a separate artifact such as `prototype_eval_train64_test.json`, plus matching predictions and confusion matrix files, into the same Phase 4 run directory.
 
-5. Update downstream checkpoint references when needed:
+Update downstream checkpoint references when needed:
    - set `analysis.checkpoint_dir` in `configs/analysis/embeddings_*.yaml` to `outputs/phase4/<best_fewshot_experiment>`
-   - set `ensemble.cnn_checkpoint_dir` and `ensemble.vit_checkpoint_dir` in `configs/ensembles/supervised_best_models.yaml` to the selected Phase 4 experiment directories under `outputs/phase4/` - not reduced experiments with best augmentation (phase3) and hyperparameters (phase2)
    - set `ensemble.protonet_checkpoint_dir` in `configs/ensembles/protonet_efficientnet_b3_logreg.yaml` or `configs/ensembles/protonet_deit_tiny_logreg.yaml` to the selected Phase 4 Protonet experiment directory for that backbone
 
 ### 6. Run reduced-data and notreduced supervised comparisons
@@ -689,9 +688,8 @@ Repeat Phase 4 few-shot and reduced supervised runs with `--seed 37` and `--seed
 python -m archdyn.cli.aggregate --output-root outputs --phase phase4
 ```
 
-After you have run `fewshot_eval` for multiple seeds, the same aggregation step also writes `aggregate/episodic_eval_test_nway_10_mean_std.json` for each Protonet experiment, which is the fair 10-class summary to compare against the standard supervised models.
+Set `ensemble.cnn_checkpoint_dir` and `ensemble.vit_checkpoint_dir` in `configs/ensembles/supervised_best_models.yaml` to the selected Phase 4 experiment directories under `outputs/phase4/` - not reduced experiments with best augmentation (phase3) and hyperparameters (phase2)
 
-If you also run `fewshot_prototype_eval` for multiple seeds, the same aggregation step writes summaries such as `aggregate/prototype_eval_train64_test_mean_std.json`.
 
 ### 7. Run embedding analysis
 

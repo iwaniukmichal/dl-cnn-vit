@@ -15,7 +15,7 @@ training:
   batch_size: 64
   num_workers: 4
 ensemble:
-  protonet_checkpoint_dir: outputs/phase4/protonet_deit_tiny_combined
+  protonet_checkpoint_dir: outputs/phase4/protonet_deit_tiny_advanced
   meta_split: train
   eval_split: test
   logistic_regression_c: 1.0

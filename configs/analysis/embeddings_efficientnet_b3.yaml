@@ -16,7 +16,7 @@ training:
   batch_size: 64
   num_workers: 4
 analysis:
-  checkpoint_dir: outputs/phase4/protonet_efficientnet_b3_combined
+  checkpoint_dir: outputs/phase4/protonet_efficientnet_b3_advanced
   split: test
   max_tsne_samples: 2000
   tsne_random_state: 42
