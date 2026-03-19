@@ -93,23 +93,45 @@ def save_embedding_artifacts(
 
 
 def _scatter_plot(projection: np.ndarray, labels: np.ndarray, destination: Path, title: str) -> None:
-    plt.figure(figsize=(8, 6))
-    plt.scatter(projection[:, 0], projection[:, 1], c=labels, s=8, cmap="tab10")
-    plt.title(title)
-    plt.tight_layout()
-    plt.savefig(destination)
-    plt.close()
+    figure, axis = plt.subplots(figsize=(8, 6))
+    scatter = axis.scatter(projection[:, 0], projection[:, 1], c=labels, s=8, cmap="tab10", alpha=0.8)
+    axis.set_title(f"{title} Projection of Image Embeddings")
+    axis.set_xlabel(f"{title} Component 1")
+    axis.set_ylabel(f"{title} Component 2")
+    colorbar = figure.colorbar(scatter, ax=axis)
+    colorbar.set_label("Class ID")
+    figure.text(
+        0.5,
+        0.01,
+        "Each point is one image embedding; colors indicate the ground-truth class.",
+        ha="center",
+        fontsize=9,
+    )
+    figure.tight_layout(rect=(0, 0.04, 1, 1))
+    figure.savefig(destination)
+    plt.close(figure)
 
 
 def _heatmap_plot(matrix: np.ndarray, class_ids: list[int], destination: Path) -> None:
-    plt.figure(figsize=(7, 6))
-    plt.imshow(matrix, cmap="viridis")
-    plt.xticks(range(len(class_ids)), class_ids)
-    plt.yticks(range(len(class_ids)), class_ids)
-    plt.colorbar()
-    plt.tight_layout()
-    plt.savefig(destination)
-    plt.close()
+    figure, axis = plt.subplots(figsize=(7, 6))
+    image = axis.imshow(matrix, cmap="viridis")
+    axis.set_title("Centroid Distance Heatmap")
+    axis.set_xlabel("Class ID")
+    axis.set_ylabel("Class ID")
+    axis.set_xticks(range(len(class_ids)), class_ids)
+    axis.set_yticks(range(len(class_ids)), class_ids)
+    colorbar = figure.colorbar(image, ax=axis)
+    colorbar.set_label("Euclidean Distance")
+    figure.text(
+        0.5,
+        0.01,
+        "Cells show pairwise distances between class centroids in embedding space.",
+        ha="center",
+        fontsize=9,
+    )
+    figure.tight_layout(rect=(0, 0.04, 1, 1))
+    figure.savefig(destination)
+    plt.close(figure)
 
 
 def _status(message: str) -> None:
