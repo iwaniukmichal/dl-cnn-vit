@@ -306,6 +306,7 @@ def evaluate_protonet_with_fixed_prototypes(
     _status(f"Loading checkpoint: {resolved_checkpoint}")
     state_dict = torch.load(resolved_checkpoint, map_location=device)
     model.load_state_dict(state_dict)
+    model.eval()
 
     prototype_tensor, prototype_labels = _build_fixed_prototypes(model, support_loader, device)
     if len(prototype_labels) != config.dataset.num_classes:

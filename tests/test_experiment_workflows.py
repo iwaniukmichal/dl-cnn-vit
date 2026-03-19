@@ -4,10 +4,14 @@ import json
 import sys
 from pathlib import Path
 
+import torch
 import yaml
+from torch import nn
 
 from archdyn.cli import analyze_embeddings, ensemble, fewshot, fewshot_eval, fewshot_prototype_eval, search, train
+from archdyn.config import load_run_config, override_seed
 from archdyn.evaluation import embeddings as embedding_module
+from archdyn.training import fewshot as fewshot_training_module
 
 
 def _base_config(mode: str, phase: str, experiment_name: str, data_root: Path, output_root: Path, subset_root: Path) -> dict:
@@ -366,3 +370,57 @@ def test_ensemble_cli_can_run_protonet_logreg(
         summary = json.load(handle)
     assert "protonet_logreg_accuracy" in summary
     assert (run_dir / "test_metrics.json").exists()
+
+
+def test_fixed_prototype_eval_switches_model_to_eval_mode(
+    tiny_cinic10: Path,
+    output_root: Path,
+    manifest_root: Path,
+    monkeypatch,
+) -> None:
+    fewshot_config = _base_config("fewshot", "phase4", "fewshot_eval_mode", tiny_cinic10, output_root, manifest_root)
+    fewshot_config["subset"] = {
+        "enabled": True,
+        "fraction": 0.75,
+        "class_balanced": True,
+        "manifest_name": "fewshot_eval_mode_subset.txt",
+    }
+    fewshot_config["model"] = {
+        "family": "pretrained_cnn",
+        "name": "efficientnet_b3",
+        "pretrained": True,
+        "num_classes": 10,
+        "drop_path": 0.0,
+    }
+    fewshot_config["optimizer"] = {"name": "adamw", "lr": 0.001, "weight_decay": 0.0001}
+    fewshot_config["scheduler"] = {"name": "none"}
+    fewshot_config["augmentation"] = {"name": "baseline"}
+    fewshot_config["fewshot"] = {
+        "n_way": 5,
+        "k_shot": 1,
+        "q_query": 1,
+        "train_episodes": 2,
+        "val_episodes": 1,
+        "test_episodes": 1,
+    }
+    fewshot_path = _write_yaml(output_root.parent / "configs" / "fewshot_eval_mode.yaml", fewshot_config)
+    _run_cli(fewshot, fewshot_path, monkeypatch)
+
+    config = override_seed(load_run_config(fewshot_path), 13)
+
+    class DummyProtoModel(nn.Module):
+        def embed(self, x):
+            return torch.flatten(x, 1)
+
+        def load_state_dict(self, state_dict, strict: bool = True):
+            return self
+
+    dummy_model = DummyProtoModel()
+    monkeypatch.setattr(fewshot_training_module, "build_protonet_model", lambda config, device: dummy_model)
+
+    fewshot_training_module.evaluate_protonet_with_fixed_prototypes(
+        config,
+        support_samples_per_class=2,
+    )
+
+    assert dummy_model.training is False
