@@ -1,0 +1,21 @@
+mode: ensemble
+phase: ensembles
+experiment_name: protonet_deit_tiny_logreg
+paths:
+  output_root: outputs
+  subset_root: data/manifests
+dataset:
+  input_size: 224
+model:
+  family: vit
+  name: deit_tiny
+  pretrained: true
+  num_classes: 10
+training:
+  batch_size: 64
+  num_workers: 4
+ensemble:
+  protonet_checkpoint_dir: outputs/phase4/protonet_deit_tiny_combined
+  meta_split: train
+  eval_split: test
+  logistic_regression_c: 1.0

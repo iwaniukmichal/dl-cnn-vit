@@ -217,6 +217,34 @@ python -m archdyn.cli.fewshot --config configs/phase4/protonet_efficientnet_b3_s
 python -m archdyn.cli.fewshot --config configs/phase4/protonet_deit_tiny_combined.yaml --seed 13
 ```
 
+#### `python -m archdyn.cli.fewshot_eval`
+
+Use after few-shot training to rerun episodic evaluation from a saved checkpoint, for example with `--eval-n-way 10` so Protonet is tested on all CINIC-10 classes.
+
+Config sources:
+- `configs/phase4/protonet_*.yaml`
+
+Examples:
+
+```bash
+python -m archdyn.cli.fewshot_eval --config configs/phase4/protonet_efficientnet_b3_standard.yaml --seed 13 --eval-n-way 10
+python -m archdyn.cli.fewshot_eval --config configs/phase4/protonet_deit_tiny_combined.yaml --seed 13 --eval-n-way 10
+```
+
+#### `python -m archdyn.cli.fewshot_prototype_eval`
+
+Use after few-shot training to build one fixed prototype per class from the training split, for example from `64` randomly sampled training examples per class, and then classify the test split against those prototypes.
+
+Config sources:
+- `configs/phase4/protonet_*.yaml`
+
+Examples:
+
+```bash
+python -m archdyn.cli.fewshot_prototype_eval --config configs/phase4/protonet_efficientnet_b3_standard.yaml --seed 13 --support-samples-per-class 64
+python -m archdyn.cli.fewshot_prototype_eval --config configs/phase4/protonet_deit_tiny_combined.yaml --seed 13 --support-samples-per-class 64
+```
+
 #### `python -m archdyn.cli.analyze_embeddings`
 
 Use after few-shot training to analyze saved checkpoints.
@@ -233,15 +261,16 @@ python -m archdyn.cli.analyze_embeddings --config configs/analysis/embeddings_de
 
 #### `python -m archdyn.cli.ensemble`
 
-Use after supervised training to evaluate ensembles from saved checkpoints.
+Use after supervised or few-shot training to evaluate ensemble-style downstream experiments from saved checkpoints.
 
 Config sources:
 - `configs/ensembles/*.yaml`
 
-Example:
+Examples:
 
 ```bash
 python -m archdyn.cli.ensemble --config configs/ensembles/supervised_best_models.yaml --seed 13
+python -m archdyn.cli.ensemble --config configs/ensembles/protonet_efficientnet_b3_logreg.yaml --seed 13
 ```
 
 #### `python -m archdyn.cli.aggregate`
@@ -423,6 +452,10 @@ Inputs:
 - episodic few-shot settings from YAML
 - validation and test splits for episodic evaluation
 
+Note:
+- Phase 4 training configs are `5-way` by default. This is valid meta-learning training, but for comparison against standard 10-class supervised models you should run the separate `fewshot_eval` step with `--eval-n-way 10`.
+- You can also run `fewshot_prototype_eval` to convert a saved Protonet checkpoint into a standard closed-set classifier by averaging `64` randomly sampled train examples per class into fixed prototypes and evaluating the test split against them.
+
 #### Phase 4 reduced supervised comparison
 
 Trains:
@@ -473,6 +506,8 @@ Typical files:
 - `predictions.csv`
 - `embeddings.npz`
 - `plots/`
+- `episodic_eval_*.json`
+- `prototype_eval_*.json`
 
 Additional mode-specific outputs:
 
@@ -495,6 +530,8 @@ Additional mode-specific outputs:
   - `soft_voting_metrics.json`
   - `stacking_metrics.json`
   - `stacking_coefficients.csv`
+  - `protonet_logreg_metrics.json`
+  - `protonet_logreg_coefficients.csv`
 
 ## End-to-end experiments for the project plan
 
@@ -599,9 +636,42 @@ python -m archdyn.cli.fewshot --config configs/phase4/protonet_deit_tiny_advance
 python -m archdyn.cli.fewshot --config configs/phase4/protonet_deit_tiny_combined.yaml --seed 13
 ```
 
+The default Phase 4 Protonet configs train in `5-way` episodes. That is normal for meta-learning, but it is easier than closed-set 10-class classification. For a fairer comparison to the standard supervised models, rerun evaluation on the test split with `--eval-n-way 10` after each training run:
+
+```bash
+python -m archdyn.cli.fewshot_eval --config configs/phase4/protonet_efficientnet_b3_baseline.yaml --seed 13 --eval-n-way 10
+python -m archdyn.cli.fewshot_eval --config configs/phase4/protonet_efficientnet_b3_standard.yaml --seed 13 --eval-n-way 10
+python -m archdyn.cli.fewshot_eval --config configs/phase4/protonet_efficientnet_b3_advanced.yaml --seed 13 --eval-n-way 10
+python -m archdyn.cli.fewshot_eval --config configs/phase4/protonet_efficientnet_b3_combined.yaml --seed 13 --eval-n-way 10
+
+python -m archdyn.cli.fewshot_eval --config configs/phase4/protonet_deit_tiny_baseline.yaml --seed 13 --eval-n-way 10
+python -m archdyn.cli.fewshot_eval --config configs/phase4/protonet_deit_tiny_standard.yaml --seed 13 --eval-n-way 10
+python -m archdyn.cli.fewshot_eval --config configs/phase4/protonet_deit_tiny_advanced.yaml --seed 13 --eval-n-way 10
+python -m archdyn.cli.fewshot_eval --config configs/phase4/protonet_deit_tiny_combined.yaml --seed 13 --eval-n-way 10
+```
+
+Each fair-evaluation run writes a separate artifact into the training run directory, for example `episodic_eval_test_nway_10.json`, so the original `test_metrics.json` from the training-time `5-way` evaluation is preserved.
+
+You can also evaluate each saved Protonet checkpoint as a fixed-prototype classifier by sampling `64` training images per class, averaging their embeddings into one prototype per class, and classifying the configured test split against those prototypes:
+
+```bash
+python -m archdyn.cli.fewshot_prototype_eval --config configs/phase4/protonet_efficientnet_b3_baseline.yaml --seed 13 --support-samples-per-class 64
+python -m archdyn.cli.fewshot_prototype_eval --config configs/phase4/protonet_efficientnet_b3_standard.yaml --seed 13 --support-samples-per-class 64
+python -m archdyn.cli.fewshot_prototype_eval --config configs/phase4/protonet_efficientnet_b3_advanced.yaml --seed 13 --support-samples-per-class 64
+python -m archdyn.cli.fewshot_prototype_eval --config configs/phase4/protonet_efficientnet_b3_combined.yaml --seed 13 --support-samples-per-class 64
+
+python -m archdyn.cli.fewshot_prototype_eval --config configs/phase4/protonet_deit_tiny_baseline.yaml --seed 13 --support-samples-per-class 64
+python -m archdyn.cli.fewshot_prototype_eval --config configs/phase4/protonet_deit_tiny_standard.yaml --seed 13 --support-samples-per-class 64
+python -m archdyn.cli.fewshot_prototype_eval --config configs/phase4/protonet_deit_tiny_advanced.yaml --seed 13 --support-samples-per-class 64
+python -m archdyn.cli.fewshot_prototype_eval --config configs/phase4/protonet_deit_tiny_combined.yaml --seed 13 --support-samples-per-class 64
+```
+
+Each run writes a separate artifact such as `prototype_eval_train64_test.json`, plus matching predictions and confusion matrix files, into the same Phase 4 run directory.
+
 5. Update downstream checkpoint references when needed:
    - set `analysis.checkpoint_dir` in `configs/analysis/embeddings_*.yaml` to `outputs/phase4/<best_fewshot_experiment>`
    - set `ensemble.cnn_checkpoint_dir` and `ensemble.vit_checkpoint_dir` in `configs/ensembles/supervised_best_models.yaml` to the selected Phase 4 experiment directories under `outputs/phase4/` - not reduced experiments with best augmentation (phase3) and hyperparameters (phase2)
+   - set `ensemble.protonet_checkpoint_dir` in `configs/ensembles/protonet_efficientnet_b3_logreg.yaml` or `configs/ensembles/protonet_deit_tiny_logreg.yaml` to the selected Phase 4 Protonet experiment directory for that backbone
 
 ### 6. Run reduced-data and notreduced supervised comparisons
 
@@ -618,6 +688,10 @@ Repeat Phase 4 few-shot and reduced supervised runs with `--seed 37` and `--seed
 ```bash
 python -m archdyn.cli.aggregate --output-root outputs --phase phase4
 ```
+
+After you have run `fewshot_eval` for multiple seeds, the same aggregation step also writes `aggregate/episodic_eval_test_nway_10_mean_std.json` for each Protonet experiment, which is the fair 10-class summary to compare against the standard supervised models.
+
+If you also run `fewshot_prototype_eval` for multiple seeds, the same aggregation step writes summaries such as `aggregate/prototype_eval_train64_test_mean_std.json`.
 
 ### 7. Run embedding analysis
 
@@ -637,6 +711,8 @@ python -m archdyn.cli.aggregate --output-root outputs --phase analysis
 
 ```bash
 python -m archdyn.cli.ensemble --config configs/ensembles/supervised_best_models.yaml --seed 13
+python -m archdyn.cli.ensemble --config configs/ensembles/protonet_efficientnet_b3_logreg.yaml --seed 13
+python -m archdyn.cli.ensemble --config configs/ensembles/protonet_deit_tiny_logreg.yaml --seed 13
 ```
 
 Repeat the ensemble run with `--seed 37` and `--seed 73`, then aggregate the ensemble phase:
@@ -648,6 +724,7 @@ python -m archdyn.cli.aggregate --output-root outputs --phase ensembles
 Note:
 
 - The ensemble config supports separate `ensemble.cnn_input_size` and `ensemble.vit_input_size`, so EfficientNet and DeiT can be evaluated at different resolutions.
+- The Protonet linear-probe configs use `ensemble.meta_split: train` and `ensemble.eval_split: test`, training logistic regression on frozen Protonet embeddings from the selected checkpoint directory.
 
 ### 9. Aggregate results across seeds
 

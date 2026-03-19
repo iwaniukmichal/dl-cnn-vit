@@ -101,6 +101,7 @@ class AnalysisConfig:
 class EnsembleConfig:
     cnn_checkpoint_dir: str = ""
     vit_checkpoint_dir: str = ""
+    protonet_checkpoint_dir: str = ""
     cnn_input_size: int = 300
     vit_input_size: int = 224
     meta_split: str = "valid"

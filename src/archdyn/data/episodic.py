@@ -18,6 +18,19 @@ class EpisodeSampler:
         self.class_to_indices: dict[int, list[int]] = defaultdict(list)
         for index, (_, label) in enumerate(_dataset_samples(dataset)):
             self.class_to_indices[label].append(index)
+        available_classes = len(self.class_to_indices)
+        if self.config.n_way > available_classes:
+            raise ValueError(
+                f"fewshot.n_way={self.config.n_way} exceeds the number of classes available "
+                f"in this split ({available_classes})"
+            )
+        required_samples = self.config.k_shot + self.config.q_query
+        for class_id, indices in self.class_to_indices.items():
+            if len(indices) < required_samples:
+                raise ValueError(
+                    f"Class {class_id} has {len(indices)} samples, but each episode needs "
+                    f"{required_samples} per class (k_shot + q_query)"
+                )
 
     def sample_episode(self, episode_index: int | None = None) -> dict[str, torch.Tensor]:
         rng = self.rng if episode_index is None else np.random.default_rng(self.seed + episode_index)

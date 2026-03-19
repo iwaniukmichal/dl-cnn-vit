@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 import yaml
 
-from archdyn.cli import aggregate, search, train
+from archdyn.cli import aggregate, fewshot, fewshot_eval, fewshot_prototype_eval, search, train
 
 
 def _base_config(mode: str, phase: str, experiment_name: str, data_root: Path, output_root: Path, subset_root: Path) -> dict:
@@ -146,3 +146,80 @@ def test_aggregate_cli_aggregates_search_results_across_seeds(
     assert "lr" in best_payload
     assert "drop_path" in best_payload
     assert "weight_decay" in best_payload
+
+
+def test_aggregate_cli_aggregates_fewshot_eval_metrics_across_seeds(
+    tiny_cinic10: Path,
+    output_root: Path,
+    manifest_root: Path,
+    monkeypatch,
+) -> None:
+    config = _base_config("fewshot", "phase4", "aggregate_fewshot_eval", tiny_cinic10, output_root, manifest_root)
+    config["subset"] = {
+        "enabled": True,
+        "fraction": 0.75,
+        "class_balanced": True,
+        "manifest_name": "aggregate_fewshot_subset.txt",
+    }
+    config["model"] = {
+        "family": "pretrained_cnn",
+        "name": "efficientnet_b3",
+        "pretrained": True,
+        "num_classes": 10,
+        "drop_path": 0.0,
+    }
+    config["optimizer"] = {"name": "adamw", "lr": 0.001, "weight_decay": 0.0001}
+    config["scheduler"] = {"name": "none"}
+    config["augmentation"] = {"name": "baseline"}
+    config["fewshot"] = {
+        "n_way": 5,
+        "k_shot": 1,
+        "q_query": 1,
+        "train_episodes": 2,
+        "val_episodes": 1,
+        "test_episodes": 1,
+    }
+    config_path = _write_yaml(output_root.parent / "configs" / "aggregate_fewshot_eval.yaml", config)
+
+    for seed in (13, 37):
+        _run_seeded_cli(fewshot, config_path, monkeypatch, seed=seed)
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "prog",
+                "--config",
+                str(config_path),
+                "--seed",
+                str(seed),
+                "--eval-n-way",
+                "10",
+            ],
+        )
+        fewshot_eval.main()
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "prog",
+                "--config",
+                str(config_path),
+                "--seed",
+                str(seed),
+                "--support-samples-per-class",
+                "2",
+            ],
+        )
+        fewshot_prototype_eval.main()
+
+    monkeypatch.setattr(sys, "argv", ["prog", "--output-root", str(output_root), "--phase", "phase4"])
+    aggregate.main()
+
+    aggregate_dir = output_root / "phase4" / "aggregate_fewshot_eval" / "aggregate"
+    assert (aggregate_dir / "metrics_mean_std.json").exists()
+    assert (aggregate_dir / "episodic_eval_test_nway_10_mean_std.json").exists()
+    assert (aggregate_dir / "prototype_eval_train2_test_mean_std.json").exists()
+    with (aggregate_dir / "episodic_eval_test_nway_10_mean_std.json").open("r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+    assert "accuracy" in payload
+    assert "eval_n_way" in payload

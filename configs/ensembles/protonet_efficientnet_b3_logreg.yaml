@@ -1,11 +1,11 @@
 mode: ensemble
 phase: ensembles
-experiment_name: supervised_best_models
+experiment_name: protonet_efficientnet_b3_logreg
 paths:
   output_root: outputs
   subset_root: data/manifests
 dataset:
-  input_size: 224
+  input_size: 300
 model:
   family: pretrained_cnn
   name: efficientnet_b3
@@ -15,10 +15,7 @@ training:
   batch_size: 64
   num_workers: 4
 ensemble:
-  cnn_checkpoint_dir: outputs/phase4/not_reduced_supervised_efficientnet_b3
-  vit_checkpoint_dir: outputs/phase4/not_reduced_supervised_deit_tiny
-  cnn_input_size: 300
-  vit_input_size: 224
-  meta_split: valid
+  protonet_checkpoint_dir: outputs/phase4/protonet_efficientnet_b3_combined
+  meta_split: train
   eval_split: test
   logistic_regression_c: 1.0

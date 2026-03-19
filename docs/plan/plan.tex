@@ -167,6 +167,8 @@ Combined & DeiT-Tiny & Reduced & 3 \\
 
 For the episodic training, we will perform a 5-way classification task where the model must distinguish between some number of examples from each of the 5 classes, with queries used to evaluate performance. We will run a sufficiently large number of episodes during training to ensure stable learning.
 
+To make the few-shot results easier to compare with standard closed-set classification on CINIC-10, we will also run two additional evaluations for each saved Prototypical Network checkpoint. First, we will perform a \textbf{10-way episodic evaluation} on the test split. Second, we will create a \textbf{fixed-prototype classifier} by sampling 64 examples per class from the training split, averaging their embeddings into one prototype per class, and then classifying the test split against these 10 prototypes.
+
 \subsubsection{Quantitative Analysis of Learned Representations}
 
 For each of the models trained in few-shot learning, we will extract the learned feature representations and compute metrics that reveal the quality and structure of these learned spaces:
@@ -226,6 +228,8 @@ In addition to evaluating the individual performance of ResNet-18 and DeiT-Tiny,
 First, we apply \textbf{soft voting} at the prediction level. For each input sample, we average the softmax probability outputs of the optimized ResNet-18 and DeiT-Tiny models and select the final class based on the highest averaged probability.
 
 Second, we implement a \textbf{stacking strategy at the embedding level}. We concatenate the learned embeddings from the optimized ResNet-18 and DeiT-Tiny models and train a logistic regression classifier on top of the combined representation. The backbone models remain frozen during this stage, and only the logistic regression layer is trained.
+
+Third, we add a \textbf{Prototypical Network linear probe}. For the selected Phase 4 Protonet checkpoint of each backbone, we freeze the encoder, extract embeddings on the training split, and train a logistic regression classifier on top of those embeddings. We then evaluate this linear probe on the test split. 
 
 
 \end{document}

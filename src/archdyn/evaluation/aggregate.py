@@ -36,23 +36,9 @@ def seed_dirs_for_experiment(experiment_dir: Path) -> list[Path]:
 
 
 def aggregate_experiment_metrics(experiment_dir: Path) -> dict[str, Any]:
-    rows = []
-    for seed_dir in seed_dirs_for_experiment(experiment_dir):
-        metrics_path = seed_dir / "test_metrics.json"
-        if not metrics_path.exists():
-            continue
-        with metrics_path.open("r", encoding="utf-8") as handle:
-            payload = json.load(handle)
-        rows.append(payload)
-    if not rows:
-        return {}
-
-    frame = pd.DataFrame(rows)
-    aggregate_dir = experiment_dir / "aggregate"
-    aggregate_dir.mkdir(parents=True, exist_ok=True)
-    frame.to_csv(aggregate_dir / "metrics_summary.csv", index=False)
-    payload = summarize_numeric_frame(frame)
-    write_json(payload, aggregate_dir / "metrics_mean_std.json")
+    payload = _aggregate_metric_file(experiment_dir, "test_metrics.json", "metrics")
+    for metrics_filename in _discover_extra_metric_files(experiment_dir):
+        _aggregate_metric_file(experiment_dir, metrics_filename, Path(metrics_filename).stem)
     return payload
 
 
@@ -125,3 +111,35 @@ def _json_safe_value(value: Any) -> Any:
     if hasattr(value, "item"):
         return value.item()
     return value
+
+
+def _aggregate_metric_file(experiment_dir: Path, metrics_filename: str, output_stem: str) -> dict[str, Any]:
+    rows = []
+    for seed_dir in seed_dirs_for_experiment(experiment_dir):
+        metrics_path = seed_dir / metrics_filename
+        if not metrics_path.exists():
+            continue
+        with metrics_path.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+        rows.append(payload)
+    if not rows:
+        return {}
+
+    frame = pd.DataFrame(rows)
+    aggregate_dir = experiment_dir / "aggregate"
+    aggregate_dir.mkdir(parents=True, exist_ok=True)
+    summary_name = "metrics_summary.csv" if output_stem == "metrics" else f"{output_stem}_summary.csv"
+    mean_std_name = "metrics_mean_std.json" if output_stem == "metrics" else f"{output_stem}_mean_std.json"
+    frame.to_csv(aggregate_dir / summary_name, index=False)
+    payload = summarize_numeric_frame(frame)
+    write_json(payload, aggregate_dir / mean_std_name)
+    return payload
+
+
+def _discover_extra_metric_files(experiment_dir: Path) -> list[str]:
+    metric_names = set()
+    for seed_dir in seed_dirs_for_experiment(experiment_dir):
+        for pattern in ("episodic_eval_*.json", "prototype_eval_*.json"):
+            for metrics_path in seed_dir.glob(pattern):
+                metric_names.add(metrics_path.name)
+    return sorted(metric_names)

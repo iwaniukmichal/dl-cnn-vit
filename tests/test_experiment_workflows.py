@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
 import yaml
 
-from archdyn.cli import analyze_embeddings, ensemble, fewshot, search, train
+from archdyn.cli import analyze_embeddings, ensemble, fewshot, fewshot_eval, fewshot_prototype_eval, search, train
 from archdyn.evaluation import embeddings as embedding_module
 
 
@@ -156,7 +157,7 @@ def test_fewshot_and_embedding_analysis_clis_run_end_to_end(
     fewshot_config["optimizer"] = {"name": "adamw", "lr": 0.001, "weight_decay": 0.0001}
     fewshot_config["augmentation"] = {"name": "baseline"}
     fewshot_config["fewshot"] = {
-        "n_way": 10,
+        "n_way": 5,
         "k_shot": 1,
         "q_query": 1,
         "train_episodes": 2,
@@ -173,6 +174,52 @@ def test_fewshot_and_embedding_analysis_clis_run_end_to_end(
     assert (manifest_root / "fewshot_subset_train.txt").exists()
     assert (manifest_root / "fewshot_subset_valid.txt").exists()
     assert (manifest_root / "fewshot_subset_test.txt").exists()
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "prog",
+            "--config",
+            str(fewshot_path),
+            "--seed",
+            "13",
+            "--eval-n-way",
+            "10",
+        ],
+    )
+    fewshot_eval.main()
+
+    fair_eval_path = fewshot_run_dir / "episodic_eval_test_nway_10.json"
+    assert fair_eval_path.exists()
+    with fair_eval_path.open("r", encoding="utf-8") as handle:
+        fair_eval_metrics = json.load(handle)
+    assert fair_eval_metrics["train_n_way"] == 5
+    assert fair_eval_metrics["eval_n_way"] == 10
+    assert fair_eval_metrics["split"] == "test"
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "prog",
+            "--config",
+            str(fewshot_path),
+            "--seed",
+            "13",
+            "--support-samples-per-class",
+            "2",
+        ],
+    )
+    fewshot_prototype_eval.main()
+
+    prototype_eval_path = fewshot_run_dir / "prototype_eval_train2_test.json"
+    assert prototype_eval_path.exists()
+    with prototype_eval_path.open("r", encoding="utf-8") as handle:
+        prototype_eval_metrics = json.load(handle)
+    assert prototype_eval_metrics["support_split"] == "train"
+    assert prototype_eval_metrics["eval_split"] == "test"
+    assert prototype_eval_metrics["support_samples_per_class"] == 2
 
     analysis_config = _base_config("embedding_analysis", "analysis", "embedding_smoke", tiny_cinic10, output_root, manifest_root)
     analysis_config["model"] = {
@@ -258,4 +305,64 @@ def test_ensemble_cli_uses_saved_supervised_checkpoints(
     assert (run_dir / "soft_voting_metrics.json").exists()
     assert (run_dir / "stacking_metrics.json").exists()
     assert (run_dir / "stacking_coefficients.csv").exists()
+
+
+def test_ensemble_cli_can_run_protonet_logreg(
+    tiny_cinic10: Path,
+    output_root: Path,
+    manifest_root: Path,
+    monkeypatch,
+) -> None:
+    fewshot_config = _base_config("fewshot", "phase4", "fewshot_for_logreg", tiny_cinic10, output_root, manifest_root)
+    fewshot_config["subset"] = {
+        "enabled": True,
+        "fraction": 0.75,
+        "class_balanced": True,
+        "manifest_name": "fewshot_logreg_subset.txt",
+    }
+    fewshot_config["model"] = {
+        "family": "pretrained_cnn",
+        "name": "efficientnet_b3",
+        "pretrained": True,
+        "num_classes": 10,
+        "drop_path": 0.0,
+    }
+    fewshot_config["optimizer"] = {"name": "adamw", "lr": 0.001, "weight_decay": 0.0001}
+    fewshot_config["scheduler"] = {"name": "none"}
+    fewshot_config["augmentation"] = {"name": "baseline"}
+    fewshot_config["fewshot"] = {
+        "n_way": 5,
+        "k_shot": 1,
+        "q_query": 1,
+        "train_episodes": 2,
+        "val_episodes": 1,
+        "test_episodes": 1,
+    }
+    fewshot_path = _write_yaml(output_root.parent / "configs" / "fewshot_for_logreg.yaml", fewshot_config)
+    _run_cli(fewshot, fewshot_path, monkeypatch)
+
+    ensemble_config = _base_config("ensemble", "ensembles", "protonet_logreg_smoke", tiny_cinic10, output_root, manifest_root)
+    ensemble_config["model"] = {
+        "family": "pretrained_cnn",
+        "name": "efficientnet_b3",
+        "pretrained": True,
+        "num_classes": 10,
+        "drop_path": 0.0,
+    }
+    ensemble_config["ensemble"] = {
+        "protonet_checkpoint_dir": str(output_root / "phase4" / "fewshot_for_logreg"),
+        "meta_split": "train",
+        "eval_split": "test",
+        "logistic_regression_c": 1.0,
+    }
+    ensemble_path = _write_yaml(output_root.parent / "configs" / "protonet_logreg_smoke.yaml", ensemble_config)
+
+    _run_cli(ensemble, ensemble_path, monkeypatch)
+
+    run_dir = output_root / "ensembles" / "protonet_logreg_smoke" / "seed_13"
+    assert (run_dir / "protonet_logreg_metrics.json").exists()
+    assert (run_dir / "protonet_logreg_coefficients.csv").exists()
+    with (run_dir / "test_metrics.json").open("r", encoding="utf-8") as handle:
+        summary = json.load(handle)
+    assert "protonet_logreg_accuracy" in summary
     assert (run_dir / "test_metrics.json").exists()
