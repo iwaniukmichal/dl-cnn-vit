@@ -247,7 +247,7 @@ python -m archdyn.cli.fewshot_prototype_eval --config configs/phase4/protonet_de
 
 #### `python -m archdyn.cli.analyze_embeddings`
 
-Use after few-shot training to analyze saved checkpoints.
+Use after few-shot or supervised training to analyze saved checkpoints.
 
 Config sources:
 - `configs/analysis/*.yaml`
@@ -257,6 +257,7 @@ Examples:
 ```bash
 python -m archdyn.cli.analyze_embeddings --config configs/analysis/embeddings_efficientnet_b3.yaml --seed 13
 python -m archdyn.cli.analyze_embeddings --config configs/analysis/embeddings_deit_tiny.yaml --seed 13
+python -m archdyn.cli.analyze_embeddings --config configs/analysis/embeddings_efficientnet_b3_supervised.yaml --seed 13
 ```
 
 #### `python -m archdyn.cli.ensemble`
@@ -337,6 +338,8 @@ Important config fields:
 
 - `analysis.checkpoint_dir`
   - Source directory for embedding-analysis checkpoints
+- `analysis.checkpoint_type`
+  - `fewshot` for Protonet checkpoints or `supervised` for standard classifier checkpoints
 
 - `ensemble.cnn_checkpoint_dir` and `ensemble.vit_checkpoint_dir`
   - Source directories for ensemble checkpoints
@@ -381,7 +384,7 @@ data/cinic10/
   - Uses the same optimizer, scheduler, weight decay, drop path, and augmentation config fields as later supervised phases
 
 - `embedding_analysis`
-  - Reads saved few-shot checkpoints from `analysis.checkpoint_dir`
+  - Reads saved few-shot or supervised checkpoints from `analysis.checkpoint_dir`
   - Runs embedding extraction on the configured dataset split
 
 - `ensemble`
@@ -696,9 +699,13 @@ Set `ensemble.cnn_checkpoint_dir` and `ensemble.vit_checkpoint_dir` in `configs/
 ```bash
 python -m archdyn.cli.analyze_embeddings --config configs/analysis/embeddings_efficientnet_b3.yaml --seed 13
 python -m archdyn.cli.analyze_embeddings --config configs/analysis/embeddings_deit_tiny.yaml --seed 13
+python -m archdyn.cli.analyze_embeddings --config configs/analysis/embeddings_efficientnet_b3_supervised.yaml --seed 13
+python -m archdyn.cli.analyze_embeddings --config configs/analysis/embeddings_deit_tiny_supervised.yaml --seed 13
 ```
 
-Repeat both analysis jobs with `--seed 37` and `--seed 73`, then aggregate the `analysis` phase to obtain mean/std summaries for the embedding metrics:
+The Protonet analysis configs read selected Phase 4 few-shot checkpoints. The supervised analysis configs read `outputs/phase4/not_reduced_supervised_efficientnet_b3` and `outputs/phase4/not_reduced_supervised_deit_tiny`, so you can compare Protonet representations against standard supervised models on the same sampled train/test subsets.
+
+Repeat all analysis jobs with `--seed 37` and `--seed 73`, then aggregate the `analysis` phase to obtain mean/std summaries for the embedding metrics:
 
 ```bash
 python -m archdyn.cli.aggregate --output-root outputs --phase analysis

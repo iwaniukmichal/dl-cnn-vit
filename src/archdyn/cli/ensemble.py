@@ -22,16 +22,20 @@ def main() -> None:
     parser.add_argument("--config", required=True)
     parser.add_argument("--seed", type=int, required=True)
     args = parser.parse_args()
+    _status(f"Loading config: {args.config}")
     config = override_seed(load_run_config(args.config), args.seed)
     device = resolve_device(config.training.device)
     seed = config.seed
+    _status(f"Seeding run with seed={seed}")
     seed_everything(seed, deterministic=config.training.deterministic)
     run_directory = prepare_run_dir(config, seed)
+    _status(f"Preparing output directory: {run_directory}")
     write_config_snapshot(config, run_directory / "config.snapshot.yaml")
 
     summary = {"seed": seed}
 
     if config.ensemble.cnn_checkpoint_dir and config.ensemble.vit_checkpoint_dir:
+        _status("Preparing CNN+ViT ensemble datasets and models")
         cnn_config = copy.deepcopy(config)
         cnn_config.model.family = "pretrained_cnn"
         cnn_config.model.name = "efficientnet_b3"
@@ -86,9 +90,11 @@ def main() -> None:
             torch.load(Path(config.ensemble.vit_checkpoint_dir) / f"seed_{seed}" / "checkpoint_best.pt", map_location=device)
         )
 
+        _status("Running soft voting")
         soft_metrics, soft_predictions = soft_voting(cnn_model, vit_model, cnn_eval_loader, vit_eval_loader, device)
         write_json(soft_metrics, run_directory / "soft_voting_metrics.json")
         pd.DataFrame({"prediction": soft_predictions}).to_csv(run_directory / "soft_voting_predictions.csv", index=False)
+        _status("Running embedding stacking with logistic regression")
         stacking_metrics = stacking(
             cnn_model,
             vit_model,
@@ -110,6 +116,7 @@ def main() -> None:
         )
 
     if config.ensemble.protonet_checkpoint_dir:
+        _status("Preparing Protonet linear-probe datasets and model")
         protonet_config = copy.deepcopy(config)
         _, protonet_eval_transform = build_supervised_transforms(protonet_config)
         protonet_meta_dataset = build_dataset(protonet_config, config.ensemble.meta_split, protonet_eval_transform)
@@ -135,6 +142,7 @@ def main() -> None:
                 map_location=device,
             )
         )
+        _status("Training logistic regression on frozen Protonet embeddings")
         protonet_metrics = protonet_logistic_regression(
             protonet_model,
             protonet_meta_loader,
@@ -153,5 +161,12 @@ def main() -> None:
     if len(summary) == 1:
         raise ValueError("No ensemble experiment configured. Provide CNN+ViT checkpoints and/or ensemble.protonet_checkpoint_dir.")
     write_json(summary, run_directory / "test_metrics.json")
+    _status("Ensemble evaluation complete")
+
+
+def _status(message: str) -> None:
+    print(f"[ensemble] {message}", flush=True)
+
+
 if __name__ == "__main__":
     main()

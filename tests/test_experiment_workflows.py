@@ -237,6 +237,7 @@ def test_fewshot_and_embedding_analysis_clis_run_end_to_end(
         "checkpoint_dir": str(output_root / "phase4" / "fewshot_smoke"),
         "split": "test",
         "max_tsne_samples": 40,
+        "enable_tsne": True,
         "tsne_random_state": 42,
     }
     analysis_path = _write_yaml(output_root.parent / "configs" / "analysis_smoke.yaml", analysis_config)
@@ -424,3 +425,141 @@ def test_fixed_prototype_eval_switches_model_to_eval_mode(
     )
 
     assert dummy_model.training is False
+
+
+def test_embedding_analysis_can_compare_train_and_test_with_manifest_subsets(
+    tiny_cinic10: Path,
+    output_root: Path,
+    manifest_root: Path,
+    monkeypatch,
+) -> None:
+    class DummyTSNE:
+        def __init__(self, n_components: int, random_state: int, init: str) -> None:
+            self.n_components = n_components
+
+        def fit_transform(self, values):
+            return values[:, : self.n_components]
+
+    monkeypatch.setattr(embedding_module, "TSNE", DummyTSNE)
+
+    fewshot_config = _base_config("fewshot", "phase4", "fewshot_for_dual_analysis", tiny_cinic10, output_root, manifest_root)
+    fewshot_config["subset"] = {
+        "enabled": True,
+        "fraction": 0.75,
+        "class_balanced": True,
+        "manifest_name": "fewshot_dual_analysis_subset.txt",
+    }
+    fewshot_config["model"] = {
+        "family": "pretrained_cnn",
+        "name": "efficientnet_b3",
+        "pretrained": True,
+        "num_classes": 10,
+        "drop_path": 0.0,
+    }
+    fewshot_config["optimizer"] = {"name": "adamw", "lr": 0.001, "weight_decay": 0.0001}
+    fewshot_config["scheduler"] = {"name": "none"}
+    fewshot_config["augmentation"] = {"name": "baseline"}
+    fewshot_config["fewshot"] = {
+        "n_way": 5,
+        "k_shot": 1,
+        "q_query": 1,
+        "train_episodes": 2,
+        "val_episodes": 1,
+        "test_episodes": 1,
+    }
+    fewshot_path = _write_yaml(output_root.parent / "configs" / "fewshot_for_dual_analysis.yaml", fewshot_config)
+    _run_cli(fewshot, fewshot_path, monkeypatch)
+
+    analysis_config = _base_config("embedding_analysis", "analysis", "embedding_dual_smoke", tiny_cinic10, output_root, manifest_root)
+    analysis_config["model"] = {
+        "family": "pretrained_cnn",
+        "name": "efficientnet_b3",
+        "pretrained": True,
+        "num_classes": 10,
+        "drop_path": 0.0,
+    }
+    analysis_config["analysis"] = {
+        "checkpoint_dir": str(output_root / "phase4" / "fewshot_for_dual_analysis"),
+        "split": "test",
+        "include_train_split": True,
+        "manifest_name": "fewshot_dual_analysis_subset.txt",
+        "samples_per_class": 2,
+        "max_tsne_samples": 20,
+        "enable_tsne": True,
+        "tsne_random_state": 42,
+    }
+    analysis_path = _write_yaml(output_root.parent / "configs" / "analysis_dual_smoke.yaml", analysis_config)
+
+    _run_cli(analyze_embeddings, analysis_path, monkeypatch)
+
+    analysis_run_dir = output_root / "analysis" / "embedding_dual_smoke" / "seed_13"
+    assert (analysis_run_dir / "train_embeddings.npz").exists()
+    assert (analysis_run_dir / "test_embeddings.npz").exists()
+    assert (analysis_run_dir / "train_embedding_metrics.csv").exists()
+    assert (analysis_run_dir / "test_embedding_metrics.csv").exists()
+    assert (analysis_run_dir / "plots" / "train_pca.png").exists()
+    assert (analysis_run_dir / "plots" / "test_pca.png").exists()
+    with (analysis_run_dir / "test_metrics.json").open("r", encoding="utf-8") as handle:
+        summary = json.load(handle)
+    assert "train_silhouette_score" in summary
+    assert "test_silhouette_score" in summary
+
+
+def test_embedding_analysis_can_load_supervised_checkpoint_without_pretrained_bootstrap(
+    tiny_cinic10: Path,
+    output_root: Path,
+    manifest_root: Path,
+    monkeypatch,
+) -> None:
+    class DummyTSNE:
+        def __init__(self, n_components: int, random_state: int, init: str) -> None:
+            self.n_components = n_components
+
+        def fit_transform(self, values):
+            return values[:, : self.n_components]
+
+    monkeypatch.setattr(embedding_module, "TSNE", DummyTSNE)
+
+    supervised_config = _base_config("supervised", "phase4", "supervised_for_analysis", tiny_cinic10, output_root, manifest_root)
+    supervised_config["model"] = {
+        "family": "pretrained_cnn",
+        "name": "efficientnet_b3",
+        "pretrained": True,
+        "num_classes": 10,
+        "drop_path": 0.0,
+    }
+    supervised_config["optimizer"] = {"name": "adamw", "lr": 0.001, "weight_decay": 0.0001}
+    supervised_config["scheduler"] = {"name": "none"}
+    supervised_config["augmentation"] = {"name": "baseline"}
+    supervised_path = _write_yaml(output_root.parent / "configs" / "supervised_for_analysis.yaml", supervised_config)
+    _run_cli(train, supervised_path, monkeypatch)
+
+    analysis_config = _base_config("embedding_analysis", "analysis", "embedding_supervised_smoke", tiny_cinic10, output_root, manifest_root)
+    analysis_config["model"] = {
+        "family": "pretrained_cnn",
+        "name": "efficientnet_b3",
+        "pretrained": True,
+        "num_classes": 10,
+        "drop_path": 0.0,
+    }
+    analysis_config["analysis"] = {
+        "checkpoint_dir": str(output_root / "phase4" / "supervised_for_analysis"),
+        "checkpoint_type": "supervised",
+        "split": "test",
+        "include_train_split": True,
+        "samples_per_class": 2,
+        "max_tsne_samples": 20,
+        "enable_tsne": True,
+        "tsne_random_state": 42,
+    }
+    analysis_path = _write_yaml(output_root.parent / "configs" / "analysis_supervised_smoke.yaml", analysis_config)
+
+    _run_cli(analyze_embeddings, analysis_path, monkeypatch)
+
+    analysis_run_dir = output_root / "analysis" / "embedding_supervised_smoke" / "seed_13"
+    assert (analysis_run_dir / "train_embeddings.npz").exists()
+    assert (analysis_run_dir / "test_embeddings.npz").exists()
+    with (analysis_run_dir / "test_metrics.json").open("r", encoding="utf-8") as handle:
+        summary = json.load(handle)
+    assert "train_silhouette_score" in summary
+    assert "test_silhouette_score" in summary

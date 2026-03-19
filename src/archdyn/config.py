@@ -92,8 +92,13 @@ class OutputConfig:
 @dataclass(slots=True)
 class AnalysisConfig:
     checkpoint_dir: str = ""
+    checkpoint_type: str = "fewshot"
     split: str = "test"
+    include_train_split: bool = False
+    manifest_name: str | None = None
+    samples_per_class: int | None = None
     max_tsne_samples: int = 2000
+    enable_tsne: bool = True
     tsne_random_state: int = 42
 
 

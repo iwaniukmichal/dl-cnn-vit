@@ -1,6 +1,6 @@
 mode: embedding_analysis
 phase: analysis
-experiment_name: embeddings_efficientnet_b3
+experiment_name: embeddings_efficientnet_b3_supervised
 paths:
   output_root: outputs
   subset_root: data/manifests
@@ -16,8 +16,8 @@ training:
   batch_size: 64
   num_workers: 4
 analysis:
-  checkpoint_dir: outputs/phase4/protonet_efficientnet_b3_advanced
-  checkpoint_type: fewshot
+  checkpoint_dir: outputs/phase4/not_reduced_supervised_efficientnet_b3
+  checkpoint_type: supervised
   split: test
   include_train_split: true
   manifest_name: phase4_subset01_efficientnet_b3.txt

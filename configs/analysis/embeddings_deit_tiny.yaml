@@ -17,6 +17,11 @@ training:
   num_workers: 4
 analysis:
   checkpoint_dir: outputs/phase4/protonet_deit_tiny_advanced
+  checkpoint_type: fewshot
   split: test
-  max_tsne_samples: 2000
+  include_train_split: true
+  manifest_name: phase4_subset01_deit_tiny.txt
+  samples_per_class: 100
+  max_tsne_samples: 1000
+  enable_tsne: true
   tsne_random_state: 42

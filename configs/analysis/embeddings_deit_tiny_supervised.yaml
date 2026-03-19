@@ -1,14 +1,14 @@
 mode: embedding_analysis
 phase: analysis
-experiment_name: embeddings_efficientnet_b3
+experiment_name: embeddings_deit_tiny_supervised
 paths:
   output_root: outputs
   subset_root: data/manifests
 dataset:
-  input_size: 300
+  input_size: 224
 model:
-  family: pretrained_cnn
-  name: efficientnet_b3
+  family: vit
+  name: deit_tiny
   pretrained: true
   num_classes: 10
   drop_path: 0.1
@@ -16,11 +16,11 @@ training:
   batch_size: 64
   num_workers: 4
 analysis:
-  checkpoint_dir: outputs/phase4/protonet_efficientnet_b3_advanced
-  checkpoint_type: fewshot
+  checkpoint_dir: outputs/phase4/not_reduced_supervised_deit_tiny
+  checkpoint_type: supervised
   split: test
   include_train_split: true
-  manifest_name: phase4_subset01_efficientnet_b3.txt
+  manifest_name: phase4_subset01_deit_tiny.txt
   samples_per_class: 100
   max_tsne_samples: 1000
   enable_tsne: true

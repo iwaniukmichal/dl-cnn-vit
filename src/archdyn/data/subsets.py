@@ -52,3 +52,55 @@ def subset_from_manifest(dataset, manifest: Iterable[str]) -> Dataset:
     manifest_set = set(manifest)
     indices = [index for index, (sample_path, _) in enumerate(dataset.samples) if sample_path in manifest_set]
     return Subset(dataset, indices)
+
+
+def resolve_manifest_path(subset_root: str | Path, manifest_name: str, split: str) -> Path:
+    base_path = Path(manifest_name)
+    if not base_path.is_absolute():
+        base_path = Path(subset_root) / manifest_name
+    if base_path.exists():
+        return base_path
+    suffix = base_path.suffix
+    if suffix:
+        split_name = f"{base_path.stem}_{split}{suffix}"
+    else:
+        split_name = f"{base_path.name}_{split}"
+    return base_path.with_name(split_name)
+
+
+def load_manifest_entries(path: str | Path) -> list[str]:
+    resolved = Path(path)
+    if not resolved.exists():
+        raise FileNotFoundError(f"Manifest not found: {resolved}")
+    return resolved.read_text(encoding="utf-8").splitlines()
+
+
+def dataset_samples(dataset: Dataset):
+    if hasattr(dataset, "samples"):
+        return dataset.samples
+    if hasattr(dataset, "dataset") and hasattr(dataset, "indices"):
+        base_dataset = dataset.dataset
+        if hasattr(base_dataset, "samples"):
+            return [base_dataset.samples[index] for index in dataset.indices]
+    raise AttributeError("Dataset must expose samples directly or via dataset/indices")
+
+
+def sample_balanced_subset(dataset: Dataset, samples_per_class: int, seed: int) -> Dataset:
+    if samples_per_class <= 0:
+        raise ValueError("samples_per_class must be positive")
+
+    grouped: dict[int, list[int]] = defaultdict(list)
+    for index, (_, label) in enumerate(dataset_samples(dataset)):
+        grouped[int(label)].append(index)
+
+    rng = np.random.default_rng(seed)
+    selected_indices: list[int] = []
+    for label in sorted(grouped):
+        class_indices = grouped[label]
+        if len(class_indices) < samples_per_class:
+            raise ValueError(
+                f"Class {label} only has {len(class_indices)} samples, but {samples_per_class} were requested"
+            )
+        chosen = rng.choice(class_indices, size=samples_per_class, replace=False)
+        selected_indices.extend(int(index) for index in sorted(chosen))
+    return Subset(dataset, sorted(selected_indices))

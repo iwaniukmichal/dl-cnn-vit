@@ -5,7 +5,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .venv/
-data/*
+data/cinic10/*
 !data/.gitkeep
 docs/plan/*.aux
 docs/plan/*.fdb_latexmk
