@@ -107,6 +107,9 @@ class EnsembleConfig:
     cnn_checkpoint_dir: str = ""
     vit_checkpoint_dir: str = ""
     protonet_checkpoint_dir: str = ""
+    cnn_manifest_name: str | None = None
+    vit_manifest_name: str | None = None
+    protonet_manifest_name: str | None = None
     cnn_input_size: int = 300
     vit_input_size: int = 224
     meta_split: str = "valid"

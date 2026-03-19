@@ -14,8 +14,13 @@ model:
 training:
   batch_size: 64
   num_workers: 4
+subset:
+  enabled: true
+  fraction: 0.1
+  class_balanced: true
 ensemble:
   protonet_checkpoint_dir: outputs/phase4/protonet_efficientnet_b3_advanced
+  protonet_manifest_name: phase4_subset01_efficientnet_b3.txt
   meta_split: train
   eval_split: test
   logistic_regression_c: 1.0

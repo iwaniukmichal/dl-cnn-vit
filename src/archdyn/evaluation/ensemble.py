@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import torch
 from sklearn.linear_model import LogisticRegression
+from sklearn.multiclass import OneVsRestClassifier
 
 from archdyn.evaluation.embeddings import extract_embeddings
 from archdyn.evaluation.metrics import classification_metrics
@@ -70,13 +71,14 @@ def stacking(
         progress_label="stacking eval",
     )
     classifier = LogisticRegression(
-        max_iter=500,
+        max_iter=1000,
         C=c_value,
         solver="liblinear",
     )
-    classifier.fit(meta_features, meta_labels)
-    predictions = classifier.predict(eval_features)
-    pd.DataFrame(classifier.coef_).to_csv(output_dir / "stacking_coefficients.csv", index=False)
+    multiclass_classifier = OneVsRestClassifier(classifier)
+    multiclass_classifier.fit(meta_features, meta_labels)
+    predictions = multiclass_classifier.predict(eval_features)
+    pd.DataFrame(_classifier_coefficients(multiclass_classifier)).to_csv(output_dir / "stacking_coefficients.csv", index=False)
     metrics = classification_metrics(eval_labels, predictions)
     write_json(metrics, output_dir / "stacking_metrics.json")
     return metrics
@@ -103,13 +105,17 @@ def protonet_logistic_regression(
         progress_label="protonet logreg eval",
     )
     classifier = LogisticRegression(
-        max_iter=500,
+        max_iter=1000,
         C=c_value,
         solver="liblinear",
     )
-    classifier.fit(meta_features, meta_labels)
-    predictions = classifier.predict(eval_features)
-    pd.DataFrame(classifier.coef_).to_csv(output_dir / "protonet_logreg_coefficients.csv", index=False)
+    multiclass_classifier = OneVsRestClassifier(classifier)
+    multiclass_classifier.fit(meta_features, meta_labels)
+    predictions = multiclass_classifier.predict(eval_features)
+    pd.DataFrame(_classifier_coefficients(multiclass_classifier)).to_csv(
+        output_dir / "protonet_logreg_coefficients.csv",
+        index=False,
+    )
     pd.DataFrame({"label": eval_labels, "prediction": predictions}).to_csv(
         output_dir / "protonet_logreg_predictions.csv",
         index=False,
@@ -167,3 +173,7 @@ def _batch_progress_message(label: str, batch_index: int, total_batches: int | N
 
 def _status(message: str) -> None:
     print(f"[ensemble-eval] {message}", flush=True)
+
+
+def _classifier_coefficients(classifier: OneVsRestClassifier) -> np.ndarray:
+    return np.vstack([estimator.coef_.reshape(-1) for estimator in classifier.estimators_])

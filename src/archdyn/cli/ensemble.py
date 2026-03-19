@@ -40,10 +40,14 @@ def main() -> None:
         cnn_config.model.family = "pretrained_cnn"
         cnn_config.model.name = "efficientnet_b3"
         cnn_config.dataset.input_size = config.ensemble.cnn_input_size
+        if config.ensemble.cnn_manifest_name:
+            cnn_config.subset.manifest_name = config.ensemble.cnn_manifest_name
         vit_config = copy.deepcopy(config)
         vit_config.model.family = "vit"
         vit_config.model.name = "deit_tiny"
         vit_config.dataset.input_size = config.ensemble.vit_input_size
+        if config.ensemble.vit_manifest_name:
+            vit_config.subset.manifest_name = config.ensemble.vit_manifest_name
 
         _, cnn_eval_transform = build_supervised_transforms(cnn_config)
         _, vit_eval_transform = build_supervised_transforms(vit_config)
@@ -118,6 +122,8 @@ def main() -> None:
     if config.ensemble.protonet_checkpoint_dir:
         _status("Preparing Protonet linear-probe datasets and model")
         protonet_config = copy.deepcopy(config)
+        if config.ensemble.protonet_manifest_name:
+            protonet_config.subset.manifest_name = config.ensemble.protonet_manifest_name
         _, protonet_eval_transform = build_supervised_transforms(protonet_config)
         protonet_meta_dataset = build_dataset(protonet_config, config.ensemble.meta_split, protonet_eval_transform)
         protonet_meta_loader = build_dataloader(

@@ -14,9 +14,15 @@ model:
 training:
   batch_size: 64
   num_workers: 4
+subset:
+  enabled: true
+  fraction: 0.1
+  class_balanced: true
 ensemble:
   cnn_checkpoint_dir: outputs/phase4/not_reduced_supervised_efficientnet_b3
   vit_checkpoint_dir: outputs/phase4/not_reduced_supervised_deit_tiny
+  cnn_manifest_name: phase4_subset01_efficientnet_b3.txt
+  vit_manifest_name: phase4_subset01_deit_tiny.txt
   cnn_input_size: 300
   vit_input_size: 224
   meta_split: valid
