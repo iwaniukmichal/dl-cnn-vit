@@ -1,0 +1,11 @@
+{
+  "seed": 73,
+  "train_silhouette_score": 0.18714065849781036,
+  "train_davies_bouldin_index": 1.8369396949137489,
+  "train_distance_ratio": 1.3216146230697632,
+  "train_samples": 1000,
+  "test_silhouette_score": 0.12118145823478699,
+  "test_davies_bouldin_index": 2.452155919093619,
+  "test_distance_ratio": 1.141656517982483,
+  "test_samples": 1000
+}
