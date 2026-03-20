@@ -525,6 +525,35 @@ The most important files are:
 
 \appendix
 
+\section{Class ID Mapping}
+\label{sec:appendix-class-ids}
+
+The repository loads \emph{CINIC-10} through \texttt{ImageFolder}, so class IDs follow the alphabetical order of the class-directory names. Table~\ref{tab:class-id-mapping} lists the resulting mapping used by the evaluation outputs and embedding plots.
+
+\begin{table}[h!]
+\centering
+\caption{CINIC-10 class ID mapping used in the repository}
+\label{tab:class-id-mapping}
+\smallskip
+\small
+\begin{tabular}{@{}cl@{}}
+\toprule
+\textbf{Class ID} & \textbf{Class name} \\
+\midrule
+$0$ & airplane \\
+$1$ & automobile \\
+$2$ & bird \\
+$3$ & cat \\
+$4$ & deer \\
+$5$ & dog \\
+$6$ & frog \\
+$7$ & horse \\
+$8$ & ship \\
+$9$ & truck \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 \section{Embedding-Space Visualisations}
 \label{sec:appendix-plots}
 
