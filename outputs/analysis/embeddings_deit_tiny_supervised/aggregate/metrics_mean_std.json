@@ -1,0 +1,38 @@
+{
+  "seed": {
+    "mean": 41.0,
+    "std": 24.657656011875904
+  },
+  "train_silhouette_score": {
+    "mean": 0.3890919287999471,
+    "std": 0.01107838947824851
+  },
+  "train_davies_bouldin_index": {
+    "mean": 1.1264389019681207,
+    "std": 0.04379013310168212
+  },
+  "train_distance_ratio": {
+    "mean": 2.327070156733195,
+    "std": 0.05221116745933789
+  },
+  "train_samples": {
+    "mean": 1000.0,
+    "std": 0.0
+  },
+  "test_silhouette_score": {
+    "mean": 0.3175187011559804,
+    "std": 0.008813305846799001
+  },
+  "test_davies_bouldin_index": {
+    "mean": 1.3157549733024638,
+    "std": 0.07194015367682938
+  },
+  "test_distance_ratio": {
+    "mean": 2.064509471257528,
+    "std": 0.0426126485020807
+  },
+  "test_samples": {
+    "mean": 1000.0,
+    "std": 0.0
+  }
+}

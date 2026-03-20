@@ -536,7 +536,7 @@ Additional mode-specific outputs:
   - `protonet_logreg_metrics.json`
   - `protonet_logreg_coefficients.csv`
 
-## End-to-end experiments for the project plan
+## End-to-end experiments
 
 This is the intended run order for reproducing the planned project.
 Use the project-plan seed set `13`, `37`, and `73`: every training, search, few-shot, analysis, and ensemble command below should be rerun once per seed before you compare results or report mean/std values.

@@ -116,17 +116,6 @@ Use `tabularx` only when fixed-width wrapping is actually needed.
 - Avoid package sprawl.
 - Prefer standard, well-supported packages over obscure alternatives unless the project already depends on them.
 
-## Gotchas
-
-- Do not replace `\ref`-based numbering with hard-coded numbers.
-- Do not add figures or tables without referencing them in prose.
-- Do not create a bibliography entry from thin air.
-- Do not use bold to create visual emphasis in the body text.
-- Do not place table captions below tables or figure captions above figures unless the document already enforces that style.
-- Do not use display math for inline numbers in prose.
-- Do not silently change the citation style, label prefixes, or package stack of an existing project.
-- Do not over-edit the user's scientific claims; preserve meaning while improving clarity and LaTeX quality.
-
 ## Response pattern
 
 When returning work to the user:
@@ -143,7 +132,7 @@ Before finalizing, verify all of the following:
 - [ ] The prose is concise, scientific, and factually disciplined.
 - [ ] Unsupported claims are removed, qualified, or marked for citation.
 - [ ] Citations are present where needed and no citation keys were invented.
-- [ ] One-letter Polish words use non-breaking spaces where appropriate.
+- [ ] One or two-letter words use non-breaking spaces where appropriate.
 - [ ] Proper names are emphasized with `\emph{...}` when that convention applies.
 - [ ] No bold appears in running prose.
 - [ ] All figures and tables are referenced in the text.
@@ -153,50 +142,3 @@ Before finalizing, verify all of the following:
 - [ ] Mathematical content uses the correct inline or display mode.
 - [ ] Displayed equations that should be numbered are numbered and referenced with `\eqref{...}`.
 - [ ] The output is consistent with the existing document style and package stack.
-
-## Example transformations
-
-### Example 1: Rewrite prose into academic Polish LaTeX
-
-Input intent:
-- User provides an informal paragraph describing an experimental result.
-
-Output pattern:
-```latex
-Uzyskane wyniki wskazują, że wzrost parametru $\alpha$ prowadzi do zmniejszenia błędu estymacji. Efekt ten obserwowano w~całym analizowanym zakresie, zob. rys.~\ref{fig:blad-alpha}. Interpretację tego zjawiska należy jednak traktować ostrożnie, ponieważ liczność próby była ograniczona.
-```
-
-### Example 2: Insert a referenced equation
-
-Output pattern:
-```latex
-Zależność tę opisuje równanie
-\begin{equation}
-\label{eq:regresja}
-y = \beta_0 + \beta_1 x + \varepsilon.
-\end{equation}
-W~dalszej części pracy wykorzystano model z~równania~\eqref{eq:regresja}.
-```
-
-### Example 3: Insert a referenced table
-
-Output pattern:
-```latex
-Zestawienie podstawowych parametrów przedstawiono w~tab.~\ref{tab:parametry}.
-
-\begin{table}[t!]
-\centering
-\caption{Podstawowe parametry eksperymentu}
-\label{tab:parametry}
-\smallskip
-\small
-\begin{tabular}{@{}ll@{}}
-\toprule
-\textbf{Parametr} & \textbf{Wartość}\\
-\midrule
-Liczba próbek & $128$\\
-Krok czasowy & $0{,}1$\\
-\bottomrule
-\end{tabular}
-\end{table}
-```

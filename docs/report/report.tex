@@ -1,34 +1,695 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[margin=2.5cm]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{float}
+\usepackage{graphicx}
+\usepackage{multirow}
+\usepackage{subcaption}
+\usepackage{hyperref}
+\usepackage{longtable}
+\usepackage{tabularx}
+\usepackage{xcolor}
+
+\hypersetup{colorlinks=true, linkcolor=blue!70!black, urlcolor=blue!70!black}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt}
+\emergencystretch=2em
+
+\title{Architecture-Specific Training Dynamics on CINIC-10\\Final Report on EfficientNet-B3, DeiT-Tiny, and Few-Shot Extensions}
+\author{Bart\l{}omiej Borycki \and Micha\l{} Iwaniuk}
+\date{\today}
+
+\begin{document}
+\maketitle
+
 \begin{abstract}
-% Briefly summarize the research problem, the proposed approach, the experimental setup,
-% the most important results, and the main conclusions. Keep it concise.
+This report reconstructs the completed study directly from the repository artifacts already stored in~\texttt{outputs/}. The original project plan asked how a convolutional backbone and a vision transformer react to changes in optimization, augmentation, and low-data training on \emph{CINIC-10}. In the executed repository, \emph{EfficientNet-B3} was used instead of the originally planned ResNet-18 as the main CNN reference, while \emph{DeiT-Tiny} remained the transformer baseline. Across three seeds, the pretrained backbones clearly outperformed the custom CNN in Phase~1, with EfficientNet-B3 reaching $91.37 \pm 0.19$ and DeiT-Tiny $88.94 \pm 0.11$ test accuracy. Phase~2 showed that cosine scheduling was the most reliable improvement for both backbones, while EfficientNet-B3 was especially sensitive to an overly large learning rate. Phase~3 found that the repository's \texttt{advanced} augmentation variant, implemented as CutMix-based augmentation, produced the best reduced-data results for both backbones; the \texttt{combined} variant was consistently worse. In Phase~4, standard supervised learning on the reduced $10\%$ subset remained stronger than the comparable closed-set evaluations derived from Prototypical Networks, although few-shot training produced competitive results and informative embeddings. Embedding analysis across all three seeds revealed a useful asymmetry: few-shot DeiT-Tiny formed substantially cleaner clusters than few-shot EfficientNet-B3 despite lower classification accuracy. Ensemble methods did not improve over the best single full-data model. The main conclusion is that architecture-dependent behaviour is real, but in this repository the dominant practical factors were scheduler choice, careful regularization, and the difference between episodic and closed-set evaluation.
 \end{abstract}
 
-\tableofcontents
-
 \section{Research Problem Description}
-% Explain the problem addressed in the project so that a reader unfamiliar with the task
-% can understand the context, motivation, goals, scope, and expected outcomes.
+\label{sec:problem}
+
+The goal of the project was to compare how two different image-classification paradigms behave under the same experimental pipeline: a convolutional network and a vision transformer. The original plan framed this as a comparison between ResNet-18 and DeiT-Tiny, but the implemented repository and the completed outputs replaced ResNet-18 with EfficientNet-B3. This report therefore follows the executed study rather than the hypothetical plan and treats EfficientNet-B3 as the CNN reference model throughout.
+
+The study was organized into four main phases. Phase~1 established baseline performance for three models: a custom CNN trained from scratch, EfficientNet-B3, and DeiT-Tiny. Phase~2 performed a fixed hyperparameter search for the two pretrained backbones. Phase~3 tested four augmentation strategies under the tuned Phase~2 hyperparameters. Phase~4 extended the comparison to low-data learning through Prototypical Networks, reduced-data supervised baselines, embedding-space analysis, and downstream ensemble-style evaluations.
+
+The central research questions were:
+
+\begin{enumerate}[nosep]
+    \item Which backbone is strongest under default supervised training on \emph{CINIC-10}?
+    \item Which optimization and regularization settings are most helpful for the CNN and for the transformer?
+    \item Do augmentation effects differ across architectures, and if so, which strategy is the most reliable?
+    \item Under low-data conditions, does few-shot training outperform standard supervised training, and how do the learned embedding spaces differ?
+\end{enumerate}
+
+This report uses the project plan to preserve the intended structure, the README to reconstruct the workflow, and the files already present in~\texttt{outputs/} as the sole evidence base for all quantitative claims. No experiments were rerun while preparing the report.
 
 \section{Theoretical Introduction and Literature Review}
-% Present the theoretical background needed to understand the work.
-% Summarize and compare relevant literature, prior methods, related models, and key concepts.
+\label{sec:theory}
+
+% TODO: add bibliography entries for CINIC-10, EfficientNet, DeiT, and Prototypical Networks if the report is extended into a citation-backed paper.
+
+The repository compares two families of representation learners with different inductive biases. Convolutional neural networks build locality and translation-equivariance directly into the architecture, which usually makes them efficient and stable on moderate-size image datasets. Vision transformers replace local convolutional filters with token-wise self-attention, which gives them more flexible global interactions but often makes them more dependent on optimization details, regularization, and augmentation quality.
+
+These architectural differences matter most when the dataset is not extremely large. \emph{CINIC-10} is larger than CIFAR-10 but still far smaller than the corpora on which modern transformers are usually pretrained or distilled. Under such conditions, transfer learning, learning-rate choice, scheduler design, stochastic regularization, and augmentation policy can change the relative standing of the models more than the backbone family alone. This is exactly why the project plan emphasized a phased comparison instead of a single benchmark table.
+
+The few-shot part of the project adds a second perspective. In standard supervised classification, the model is optimized directly for closed-set prediction over the ten dataset classes. In a Prototypical Network, the encoder instead learns an embedding space in which class means act as prototypes and new samples are classified by distance to those prototypes. This makes episodic training attractive in low-data settings, but it also changes the meaning of the evaluation metric: a $5$-way episodic score is not directly comparable to a standard $10$-class test accuracy. The repository therefore includes two bridge evaluations after few-shot training: a $10$-way episodic test and a fixed-prototype classifier built from sampled training embeddings.
+
+Embedding analysis provides a geometric view of the same problem. The silhouette score measures how well each point matches its own class cluster relative to other clusters, so higher values are better. The Davies--Bouldin index measures the ratio of within-cluster scatter to between-cluster separation, so lower values are better. The inter-class / intra-class distance ratio summarizes how strongly class centers separate relative to class spread, so higher values are better. These metrics do not replace accuracy, but they help explain whether a model succeeds because it learns a globally well-structured feature space or because it is merely good at the final decision rule used during evaluation.
+
+The repository does not ship a bibliography or citation infrastructure for a formal literature review, so this section remains a concise theoretical framing rather than a source-heavy survey. The rest of the report therefore focuses on evidence recoverable from the local experiment artifacts.
 
 \section{Description of Conducted Experiments}
-% Describe the experimental methodology in a reproducible way:
-% data used, preprocessing, tools, models, hyperparameters, baselines, evaluation procedure,
-% and any implementation details relevant to the experiments.
+\label{sec:experiments}
 
-\section{Statistically Processed Results}
-% Present the results clearly using tables, plots, and summary statistics.
-% Include statistical processing such as averages, variances, confidence intervals,
-% significance tests, or other quantitative comparisons where appropriate.
+\subsection{Executed setup and deviations from the initial plan}
+\label{subsec:setup}
+
+The completed repository follows the overall logic of the project plan, but two implementation details materially affect interpretation.
+
+First, the executed CNN backbone is \emph{EfficientNet-B3}, not ResNet-18. This substitution is explicitly documented in the repository documentation, and the entire \texttt{outputs/} tree is organized around \texttt{efficientnet\_b3} experiment names.
+
+
+The common training seed set is $\{13, 37, 73\}$ for supervised, search, few-shot, ensemble, and embedding-analysis runs.
+
+\begin{table}[t!]
+\centering
+\caption{Model inventory used in the executed study}
+\label{tab:models}
+\smallskip
+\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Model} & \textbf{Family} & \textbf{Input size} & \textbf{Pretrained} & \textbf{Role} \\
+\midrule
+Custom CNN & CNN & $32 \times 32$ & no & from-scratch baseline \\
+EfficientNet-B3 & CNN & $300 \times 300$ & yes & main CNN reference \\
+DeiT-Tiny & ViT & $224 \times 224$ & yes & transformer reference \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:models} summarizes the backbone inventory. EfficientNet-B3 and DeiT-Tiny were both fine-tuned from pretrained weights, while the custom CNN was trained from scratch as a deliberately simpler baseline.
+
+The executed experiment matrix was:
+
+\begin{enumerate}[nosep]
+    \item \textbf{Phase~1:} $3$ supervised baselines on the full training split, each repeated for seeds~13, 37, and~73.
+    \item \textbf{Phase~2:} $16$ search settings for EfficientNet-B3 and $16$ for DeiT-Tiny on class-balanced $5\%$ subsets, again repeated for the three planned seeds.
+    \item \textbf{Phase~3:} $4$ augmentation variants for each pretrained backbone on the class-balanced $5\%$ subset, using the best hyperparameters from Phase~2.
+    \item \textbf{Phase~4 few-shot:} Protonet training for both backbones under all four augmentation variants on the class-balanced $10\%$ subset, using the best hyperparameters from Phase~2, together with separate $10$-way episodic and train-$64$ prototype evaluations for every saved checkpoint.
+    \item \textbf{Phase~4 supervised:} reduced-data ($10\%$ subset) and full-data supervised comparison runs for both backbones, using the best hyperparameters from Phase~2 and the best augmentation from Phase~3.
+    \item \textbf{Analysis:} four post-hoc embedding-analysis jobs for each of the three seeds, with $100$ sampled images per class on both the train and test splits.
+    \item \textbf{Ensembles:} supervised soft voting by averaging the two models logits, supervised stacking by concatenating the two models features and training a logistic-regression classifier on top, and one Protonet linear probe per backbone.
+\end{enumerate}
+
+Counting only training jobs, the repository contains $9$ Phase~1 baseline runs, $96$ expanded Phase~2 candidate trainings behind the two search jobs, $24$ Phase~3 runs, $24$ Phase~4 few-shot runs, $12$ Phase~4 supervised runs, and $9$ ensemble-style downstream runs. The analysis phase contributes $12$ post-hoc extraction jobs across three seeds.
+
+\begin{table}[t!]
+\centering
+\caption{Actual augmentation semantics in the executed repository}
+\label{tab:augmentations}
+\smallskip
+\footnotesize
+\begin{tabularx}{\textwidth}{@{}l X X@{}}
+\toprule
+\textbf{Name} & \textbf{Supervised interpretation} & \textbf{Few-shot interpretation} \\
+\midrule
+\texttt{baseline} & resizing only for non-$32 \times 32$ models, then tensor conversion and normalization & no extra augmentation beyond preprocessing \\
+\texttt{standard} & random crop or resized crop, horizontal flip, and color jitter before normalization & the same image-space transforms inside episodic training \\
+\texttt{advanced} & CutMix-style augmentation with \texttt{cutmix\_alpha = 1.0} & query-image CutMix during training episodes \\
+\texttt{combined} & \texttt{standard} transforms plus CutMix & \texttt{standard} transforms plus query-image CutMix \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Table~\ref{tab:augmentations} is important because the plan used broad labels such as ``standard'' and ``advanced,'' but the repository assigns concrete implementations to those names. In particular, the strongest Phase~3 setting is not a generic strong-augmentation recipe; it is specifically the repository's CutMix-based \texttt{advanced} variant.
+
+\subsection{Phase-specific methodology}
+\label{subsec:methodology}
+
+Phase~1 used full-data supervised training. The custom CNN was trained for $15$ epochs with AdamW, learning rate $10^{-3}$, weight decay $5 \times 10^{-4}$, batch size $128$, no scheduler, and \texttt{baseline} augmentation. The two pretrained models were fine-tuned for $5$ epochs with AdamW and no scheduler: EfficientNet-B3 used learning rate $3 \times 10^{-4}$, weight decay $10^{-4}$, drop-path $0.0$, batch size $64$, input size $300$, and \texttt{baseline} augmentation, while DeiT-Tiny used learning rate $5 \times 10^{-5}$, weight decay $0.05$, drop-path $0.0$, batch size $64$, input size $224$, and the same \texttt{baseline} augmentation.
+
+Phase~2 performed a $2^4$ grid search over learning rate, scheduler, drop-path rate, and weight decay on a deterministic class-balanced $5\%$ subset. EfficientNet-B3 searched over learning rates $\{3 \times 10^{-4}, 10^{-3}\}$, schedulers \{\texttt{none}, \texttt{cosine}\}, drop-path rates $\{0.0, 0.1\}$, and weight decay $\{10^{-4}, 5 \times 10^{-4}\}$. DeiT-Tiny searched over learning rates $\{5 \times 10^{-5}, 2 \times 10^{-4}\}$, the same scheduler options, drop-path rates $\{0.0, 0.1\}$, and weight decay $\{0.05, 0.1\}$. Search selection was based on mean validation accuracy across the three seeds.
+
+Phase~3 reused the winning Phase~2 hyperparameters for each pretrained backbone and compared the four augmentation strategies from Table~\ref{tab:augmentations} on the $5\%$ subset.
+
+Phase~4 used few-shot learning with Prototypical Networks on a deterministic $10\%$ subset, using $5$-way, $5$-shot, and $10$-query episodes, together with $200$ training episodes, $100$ validation episodes, and $200$ test episodes per run. Each backbone was trained with the same four augmentation variants as in Phase~3 and reused the winning Phase~2 hyperparameters. Because the standard ProtoNet $5$-way episodic test accuracy is not directly comparable to models evaluated over all $10$ classes, two additional evaluations were performed for every saved checkpoint: a $10$-way episodic test and a prototype-based classifier built from $64$ sampled training examples per class. In the latter setting, each class prototype was computed from $64$ random training examples. Since test-set labels are typically unavailable during inference, this provides a fairer comparison with standard supervised models, as no information from the test set is used during inference.
+
+Phase~4 also included reduced-data and full-data supervised comparisons. The executed configs reused the winning Phase~2 hyperparameters, Phase~3 augmentation strategy and a $10\%$ subset for the reduced-data runs.
+
+Finally, the repository contains four post-hoc embedding-analysis jobs and three downstream ensemble jobs. The embedding-analysis configs read the Phase~4 Protonet winning checkpoints and the Phase~4 full-data supervised checkpoints, then extract $100$ train and $100$ test embeddings per class for all three seeds. The ensemble phase evaluates soft voting by averaging the logits of the full-data EfficientNet-B3 and DeiT-Tiny checkpoints, evaluates stacking by concatenating their features and fitting a logistic-regression classifier on top, and trains logistic-regression probes on frozen embeddings from the selected Protonet checkpoints.
+
+\section{Results}
+\label{sec:results}
+
+\subsection{Phase~1 baseline architecture comparison}
+\label{subsec:phase1-results}
+
+\begin{table}[t!]
+\centering
+\caption{Phase~1 baseline results on full data (mean $\pm$ standard deviation over three seeds, all values in \%)}
+\label{tab:phase1-results}
+\smallskip
+\small
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Model} & \textbf{Accuracy} & \textbf{Macro-$F_1$} & \textbf{Best validation accuracy} \\
+\midrule
+Custom CNN & $73.75 \pm 0.37$ & $73.81 \pm 0.39$ & $73.93 \pm 0.40$ \\
+EfficientNet-B3 & $\mathbf{91.37 \pm 0.19}$ & $\mathbf{91.38 \pm 0.18}$ & $\mathbf{91.42 \pm 0.16}$ \\
+DeiT-Tiny & $88.94 \pm 0.11$ & $88.93 \pm 0.12$ & $89.10 \pm 0.11$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The baseline comparison in Table~\ref{tab:phase1-results} already answers the first research question. Both pretrained backbones strongly outperform the custom CNN, which confirms that pretraining dominates the from-scratch baseline in this setup. EfficientNet-B3 is the best Phase~1 model, exceeding DeiT-Tiny by $2.43$ percentage points and the custom CNN by $17.62$ points.
+
+Two practical conclusions follow. First, the backbone family matters even before any hyperparameter tuning: the CNN reference starts from a noticeably stronger operating point than the transformer in this repository. Second, the custom CNN is useful as a sanity-check baseline but not as a competitive model family for the rest of the study.
+
+\subsection{Phase~2 hyperparameter search}
+\label{subsec:phase2-results}
+
+
+
+Tables~\ref{tab:phase2-deit-full} and~\ref{tab:phase2-effnet-full} present the complete hyperparameter search grids for both pretrained backbones. In~each table the best configuration is highlighted in~bold.
+
+\begin{table}[t!]
+\centering
+\caption{Full Phase~2 hyperparameter search for EfficientNet-B3
+         (validation accuracy aggregated across three seeds)}
+\label{tab:phase2-effnet-full}
+\smallskip
+\footnotesize
+\begin{tabular}{@{}llcccc@{}}
+\toprule
+& & \multicolumn{2}{c}{Drop path $= 0.0$}
+  & \multicolumn{2}{c}{Drop path $= 0.1$} \\
+\cmidrule(lr){3-4}\cmidrule(lr){5-6}
+LR & Scheduler
+  & WD $= 10^{-4}$ & WD $= 5{\times}10^{-4}$
+  & WD $= 10^{-4}$ & WD $= 5{\times}10^{-4}$ \\
+\midrule
+\multirow{2}{*}{$3 \times 10^{-4}$}
+  & none   & $83.15{\pm}0.55$ & $83.58{\pm}0.44$
+           & $83.72{\pm}0.34$ & $83.60{\pm}0.17$ \\
+  & cosine & $84.80{\pm}0.23$ & $84.87{\pm}0.28$
+           & $85.35{\pm}0.07$ & $\mathbf{85.51{\pm}0.16}$ \\
+\midrule
+\multirow{2}{*}{$10^{-3}$}
+  & none   & $77.76{\pm}1.18$ & $78.70{\pm}0.66$
+           & $78.82{\pm}0.81$ & $78.30{\pm}0.30$ \\
+  & cosine & $82.84{\pm}0.58$ & $83.08{\pm}0.23$
+           & $83.54{\pm}0.62$ & $83.42{\pm}0.22$ \\
+\bottomrule
+\end{tabular}
+
+\end{table}
+
+\begin{table}[t!]
+\centering
+\caption{Full Phase~2 hyperparameter search for DeiT-Tiny
+         (validation accuracy aggregated across three seeds)}
+\label{tab:phase2-deit-full}
+\smallskip
+\footnotesize
+\begin{tabular}{@{}llcccc@{}}
+\toprule
+& & \multicolumn{2}{c}{Drop path $= 0.0$}
+  & \multicolumn{2}{c}{Drop path $= 0.1$} \\
+\cmidrule(lr){3-4}\cmidrule(lr){5-6}
+LR & Scheduler
+  & WD $= 0.05$ & WD $= 0.10$
+  & WD $= 0.05$ & WD $= 0.10$ \\
+\midrule
+\multirow{2}{*}{$5 \times 10^{-5}$}
+  & none   & $80.48{\pm}0.28$ & $80.72{\pm}0.24$
+           & $80.30{\pm}0.20$ & $80.30{\pm}0.30$ \\
+  & cosine & $80.39{\pm}0.21$ & $80.47{\pm}0.16$
+           & $80.93{\pm}0.54$ & $80.96{\pm}0.42$ \\
+\midrule
+\multirow{2}{*}{$2 \times 10^{-4}$}
+  & none   & $77.27{\pm}0.14$ & $77.83{\pm}0.25$
+           & $77.68{\pm}0.55$ & $77.26{\pm}0.43$ \\
+  & cosine & $80.92{\pm}0.63$ & $\mathbf{81.34{\pm}0.57}$
+           & $80.84{\pm}0.81$ & $80.97{\pm}0.29$ \\
+\bottomrule
+\end{tabular}
+
+\end{table}
+
+
+
+\begin{table}[t!]
+\centering
+\caption{Best Phase~2 search result for each pretrained backbone (aggregated across three seeds)}
+\label{tab:phase2-best}
+\smallskip
+\small
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{Parameter} & \textbf{EfficientNet-B3} & \textbf{DeiT-Tiny} \\
+\midrule
+LR & $3 \times 10^{-4}$ & $2 \times 10^{-4}$ \\
+Scheduler & cosine & cosine \\
+Drop path & $0.1$ & $0.0$ \\
+Weight decay & $5 \times 10^{-4}$ & $0.1$ \\
+Val. acc. (\%) & $85.51 \pm 0.16$ & $81.34 \pm 0.57$ \\
+Test acc. (\%) & $85.65 \pm 0.20$ & $81.01 \pm 0.71$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:phase2-best} shows the selected Phase~2 configurations. Cosine scheduling is the clearest common pattern: averaged across the whole grid, it raises mean validation accuracy from $80.95\%$ to $84.18\%$ for EfficientNet-B3 and from $78.98\%$ to $80.85\%$ for DeiT-Tiny. This makes the scheduler the most robust backbone-agnostic improvement discovered in the search.
+
+The second strong trend is learning-rate sensitivity. EfficientNet-B3 clearly prefers the smaller step size: averaging over the entire grid, $3 \times 10^{-4}$ yields $84.32\%$ mean validation accuracy, whereas $10^{-3}$ drops to $80.81\%$. DeiT-Tiny is more nuanced. The best single configuration uses the larger learning rate $2 \times 10^{-4}$, but the factor average over the whole grid slightly favours $5 \times 10^{-5}$ ($80.57\%$ versus $79.26\%$). However, both models benefit from a higher learning rate only when it is paired with cosine scheduling; without it, a high learning rate is harmful.
+
+Drop-path and weight decay matter less than scheduler choice in the aggregated search results. For EfficientNet-B3 they provide small but positive nudges toward the selected setting. For DeiT-Tiny their marginal effects are almost neutral in the factor averages, which again suggests that most of the benefit comes from the right optimizer-scheduler combination rather than from isolated regularization terms.
+
+\subsection{Phase~3 augmentation analysis}
+\label{subsec:phase3-results}
+
+\textsc{\begin{table}[t!]
+\centering
+\caption{Phase~3 augmentation study on the class-balanced $5\%$ subset (mean $\pm$ standard deviation over three seeds, all values in \%)}
+\label{tab:phase3-results}
+\smallskip
+\small
+\begin{tabular}{@{}llcc@{}}
+\toprule
+\textbf{Backbone} & \textbf{Augmentation} & \textbf{Accuracy} & \textbf{Macro-$F_1$} \\
+\midrule
+EfficientNet-B3 & baseline & $85.96 \pm 0.07$ & $85.91 \pm 0.07$ \\
+EfficientNet-B3 & standard & $85.33 \pm 0.20$ & $85.29 \pm 0.20$ \\
+EfficientNet-B3 & advanced & $\mathbf{86.24 \pm 0.18}$ & $\mathbf{86.21 \pm 0.18}$ \\
+EfficientNet-B3 & combined & $83.36 \pm 0.73$ & $83.25 \pm 0.74$ \\
+\midrule
+DeiT-Tiny & baseline & $81.88 \pm 0.15$ & $81.80 \pm 0.18$ \\
+DeiT-Tiny & standard & $81.52 \pm 0.56$ & $81.49 \pm 0.57$ \\
+DeiT-Tiny & advanced & $\mathbf{82.79 \pm 0.13}$ & $\mathbf{82.79 \pm 0.13}$ \\
+DeiT-Tiny & combined & $79.27 \pm 1.20$ & $79.23 \pm 1.20$ \\
+\bottomrule
+\end{tabular}
+\end{table}}
+
+The augmentation study in Table~\ref{tab:phase3-results} is consistent across backbones: the repository's \texttt{advanced} strategy is the best setting for both models, while \texttt{combined} is the worst. Relative to the no-augmentation baseline under the tuned Phase~2 hyperparameters, \texttt{advanced} improves EfficientNet-B3 by $0.28$ points and DeiT-Tiny by $0.90$ points. Relative to the best no-augmentation Phase~2 search result, the same augmentation adds $0.59$ points for EfficientNet-B3 and $1.78$ points for DeiT-Tiny.
+
+The architecture-specific effect is not in the ranking but in the magnitude. DeiT-Tiny benefits more from CutMix-style augmentation than EfficientNet-B3, which is consistent with the broader intuition that transformers are more dependent on strong regularization. At the same time, the \texttt{combined} setting degrades performance sharply for both backbones, especially for DeiT-Tiny. Because the repository defines \texttt{combined} as standard geometric and colour transforms plus CutMix, the most plausible interpretation is over-regularization in a short, reduced-data regime, although the existing artifacts cannot isolate the causal mechanism conclusively.
+
+\subsection{Phase~4 few-shot learning}
+\label{subsec:phase4-fewshot-results}
+
+\begin{table}[t!]
+\centering
+\caption{Phase~4 few-shot results on the class-balanced $10\%$ subset (mean $\pm$ standard deviation over three seeds, all values in \%)}
+\label{tab:phase4-fewshot-results}
+\smallskip
+\footnotesize
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{@{}llccc@{}}
+\toprule
+\textbf{Backbone} & \textbf{Augmentation} & \textbf{$5$-way episodic acc.} & \textbf{$10$-way episodic acc.} & \textbf{Train-$64$ prototype acc.} \\
+\midrule
+EfficientNet-B3 & baseline & $91.73 \pm 0.09$ & $\mathbf{85.98 \pm 0.26}$ & $86.42 \pm 0.36$ \\
+EfficientNet-B3 & standard & $91.32 \pm 0.33$ & $85.22 \pm 0.32$ & $86.00 \pm 0.26$ \\
+EfficientNet-B3 & advanced & $\mathbf{91.79 \pm 0.17}$ & $85.69 \pm 0.31$ & $\mathbf{86.99 \pm 0.26}$ \\
+EfficientNet-B3 & combined & $90.35 \pm 0.14$ & $83.62 \pm 0.08$ & $84.62 \pm 0.08$ \\
+\midrule
+DeiT-Tiny & baseline & $88.10 \pm 0.42$ & $80.35 \pm 0.76$ & $81.24 \pm 0.77$ \\
+DeiT-Tiny & standard & $88.00 \pm 0.39$ & $80.24 \pm 0.90$ & $81.12 \pm 0.77$ \\
+DeiT-Tiny & advanced & $\mathbf{89.09 \pm 0.27}$ & $\mathbf{81.98 \pm 0.34}$ & $\mathbf{82.61 \pm 0.33}$ \\
+DeiT-Tiny & combined & $87.31 \pm 0.68$ & $79.38 \pm 0.73$ & $80.47 \pm 0.72$ \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
+
+Table~\ref{tab:phase4-fewshot-results} must be read carefully because the three evaluation columns answer different questions. The leftmost metric is the native few-shot objective and is therefore easiest. The middle and rightmost columns are closer to closed-set classification and are the fairest basis for comparison with reduced supervised models.
+
+Within each backbone, the same pattern from Phase~3 largely persists. The \texttt{combined} strategy is again the weakest. For DeiT-Tiny, \texttt{advanced} is the best strategy under all three few-shot metrics. For EfficientNet-B3, \texttt{advanced} is best on the native $5$-way score and on the fixed-prototype classifier, while \texttt{baseline} is marginally better on the $10$-way episodic evaluation by $0.29$ points. The backbone ranking is stable: EfficientNet-B3 remains stronger than DeiT-Tiny across all few-shot accuracy measures.
+
+The larger point is that augmentation still matters in few-shot learning, but the benefit is smaller than in standard supervised training. For EfficientNet-B3 the gap between the best and worst prototype-based closed-set evaluation is $2.37$ points; for DeiT-Tiny it is $2.14$ points. This is meaningful, but it is not enough to invert the baseline backbone ordering.
+
+\subsection{Few-shot versus standard supervised learning}
+\label{subsec:phase4-supervised-results}
+
+\begin{table}[t!]
+\centering
+\caption{Phase~4 supervised comparison (mean $\pm$ standard deviation over three seeds, all values in \%)}
+\label{tab:phase4-supervised-results}
+\smallskip
+\small
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{@{}lllcc@{}}
+\toprule
+\textbf{Regime} & \textbf{Backbone} & \textbf{Augmentation lineage} & \textbf{Accuracy} & \textbf{Macro-$F_1$} \\
+\midrule
+Reduced $10\%$ subset & EfficientNet-B3 & advanced & $88.40 \pm 0.51$ & $88.36 \pm 0.51$ \\
+Reduced $10\%$ subset & DeiT-Tiny & advanced & $84.64 \pm 0.26$ & $84.62 \pm 0.27$ \\
+Full data & EfficientNet-B3 & advanced & $\mathbf{93.99 \pm 0.02}$ & $\mathbf{93.98 \pm 0.02}$ \\
+Full data & DeiT-Tiny & advanced & $90.52 \pm 0.01$ & $90.51 \pm 0.03$ \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
+
+The Phase~4 supervised comparison in Table~\ref{tab:phase4-supervised-results} answers the ``few-shot versus standard training'' research question. On the comparable closed-set metrics, supervised learning remains stronger. The best EfficientNet-B3 Protonet prototype-based classifier reaches $86.99\%$, both below the reduced supervised EfficientNet-B3 model at $88.40\%$. The same conclusion holds for DeiT-Tiny: the best Protonet best prototype-based classifier $82.61\%$, both below the reduced supervised DeiT-Tiny result of $84.64\%$.
+
+The gap widens further on the full dataset. Relative to the Phase~1 baseline, the full-data \texttt{advanced} supervised pipeline improves EfficientNet-B3 from $91.37\%$ to $93.99\%$ and DeiT-Tiny from $88.94\%$ to $90.52\%$. This indicates that, in the current implementation, low-data few-shot training did not replace conventional supervised learning. However, the $10\%$ subset still corresponds to $9000$ training examples per epoch, which is relatively large; few-shot learning may prove more beneficial in even lower-data regimes.
+
+\subsection{Embedding-space analysis}
+\label{subsec:embedding-results}
+
+\begin{table}[t!]
+\centering
+\caption{Embedding-space metrics on the test split (mean $\pm$ standard deviation over three seeds, computed from $100$ sampled images per class)}
+\label{tab:embedding-results}
+\smallskip
+\footnotesize
+\begin{tabular}{@{}llccc@{}}
+\toprule
+\textbf{Regime} & \textbf{Backbone} & \textbf{Silhouette $\uparrow$} & \textbf{Davies--Bouldin $\downarrow$} & \textbf{Distance ratio $\uparrow$} \\
+\midrule
+Few-shot advanced & EfficientNet-B3 & $0.117 \pm 0.013$ & $2.461 \pm 0.130$ & $1.125 \pm 0.049$ \\
+Few-shot advanced & DeiT-Tiny & $0.213 \pm 0.009$ & $1.667 \pm 0.060$ & $1.779 \pm 0.040$ \\
+Full-data supervised & EfficientNet-B3 & $\mathbf{0.394 \pm 0.000}$ & $\mathbf{1.100 \pm 0.040}$ & $\mathbf{2.189 \pm 0.017}$ \\
+Full-data supervised & DeiT-Tiny & $0.318 \pm 0.009$ & $1.316 \pm 0.072$ & $2.065 \pm 0.043$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The strongest general pattern in Table~\ref{tab:embedding-results} is that full-data supervised models have much cleaner embeddings than few-shot models. Both backbones improve substantially on~all three geometry metrics when moving from the few-shot checkpoint lineage to the full-data supervised checkpoint lineage.
+
+The more subtle result is a~cross-architecture disagreement between geometry and accuracy. EfficientNet-B3 is the stronger classifier in~every accuracy table, yet few-shot DeiT-Tiny produces much cleaner embedding geometry: its silhouette score is nearly twice as~high as~that of~few-shot EfficientNet-B3 ($0.213$ versus $0.117$), its Davies--Bouldin index is much lower ($1.667$ versus $2.461$), and its distance ratio is far larger ($1.779$ versus $1.125$). This implies that better representation geometry does not automatically translate into higher closed-set accuracy across backbones. Under the current evaluation pipeline, EfficientNet-B3 extracts more useful decision features for classification, while DeiT-Tiny organizes the feature space more coherently in~the few-shot setting.
+
+Figures~\ref{fig:pca-train} and~\ref{fig:pca-test} show the corresponding PCA projections. In~the first row, corresponding to~the few-shot setting, DeiT-Tiny produces more clearly defined clusters than EfficientNet-B3. In~the supervised setting shown in~the second row, the EfficientNet-B3 clusters are more clearly separable, which is consistent with results in tab.~\ref{tab:embedding-results}.
+
+However, Figures~\ref{fig:tsne-train} and~\ref{fig:tsne-test} in~Appendix~\ref{sec:appendix-plots} do not visualise this phenomenon as~clearly in~the t-SNE projections for seed~13. Both backbones produce well-separated clusters, although the EfficientNet-B3 embedding space appears slightly more compact.
+
+Figures~\ref{fig:heatmap-train} and~\ref{fig:heatmap-test} display the centroid distance matrices. Each cell shows the Euclidean distance between the class centroids in~the embedding space. The smallest off-diagonal values reveal which class pairs are hardest to~separate: for EfficientNet-B3 the closest pair is automobile--truck in~both training regimes, while for DeiT-Tiny it~is cat--dog. In~all four settings the semantically similar pairs stand out, confirming the conclusions from the visualisations.
+
+\subsection{Ensemble and linear-probe follow-up}
+\label{subsec:ensemble-results}
+
+\begin{table}[t!]
+\centering
+\caption{Downstream ensemble and linear-probe results (mean $\pm$ standard deviation over three seeds, all values in \%)}
+\label{tab:ensemble-results}
+\smallskip
+\small
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{Experiment} & \textbf{Accuracy} & \textbf{Macro-$F_1$} \\
+\midrule
+Supervised soft voting & $93.88 \pm 0.09$ & $93.87 \pm 0.09$ \\
+Supervised stacking & $93.05 \pm 0.21$ & $93.05 \pm 0.21$ \\
+Protonet linear probe (EfficientNet-B3) & $87.19 \pm 0.22$ & $87.18 \pm 0.22$ \\
+Protonet linear probe (DeiT-Tiny) & $83.04 \pm 0.17$ & $83.04 \pm 0.16$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The ensemble follow-up in Table~\ref{tab:ensemble-results} does not show additive gains over the best single model. Soft voting (average of the EfficientNet-B3 and DeiT-Tiny logits) almost matches the full-data supervised EfficientNet-B3 result but remains slightly lower ($93.88\%$ versus $93.99\%$). Stacking (feature concatenation + logistic regression) is clearly worse than both soft voting and the best single backbone. In other words, the transformer does not contribute enough complementary error correction to improve on the stronger CNN checkpoint lineage.
+
+The Protonet linear probes are more encouraging, but only modestly so. For EfficientNet-B3 the linear probe improves on the fixed-prototype evaluation from $86.99\%$ to $87.19\%$, and for DeiT-Tiny from $82.61\%$ to $83.04\%$. That means the frozen few-shot embeddings retain useful class information beyond simple nearest-prototype classification. Still, the gains are not large enough to catch the reduced supervised baselines.
 
 \section{Conclusions and Further Research}
-% Summarize the main findings and conclusions.
-% Discuss likely reasons for successes and failures, limitations of the current approach,
-% and propose concrete directions for further research or improvement.
+\label{sec:conclusions}
+
+The executed study leads to five clear conclusions.
+
+\begin{enumerate}[nosep]
+    \item EfficientNet-B3 is the strongest classifier in this repository. It beats DeiT-Tiny in the Phase~1 baseline, the Phase~4 reduced supervised comparison, the Phase~4 full-data comparison, and all few-shot accuracy evaluations.
+    \item Cosine scheduling is the most reliable tuning decision for both backbones. EfficientNet-B3 also benefits strongly from keeping the learning rate conservative, whereas DeiT-Tiny shows a more interaction-heavy search surface.
+    \item The repository's \texttt{advanced} augmentation, implemented around CutMix, is the best reduced-data supervised choice for both backbones. The \texttt{combined} policy is consistently harmful, which suggests that the current recipe becomes too aggressive in the short reduced-data regime.
+    \item Few-shot learning is useful but does not outperform standard supervised learning under comparable closed-set evaluation. On the reduced $10\%$ subset, the best Protonet-derived classifiers remain below the reduced supervised models for both backbones.
+    \item Embedding geometry and classification accuracy are related but not identical. Few-shot DeiT-Tiny learns cleaner clusters than few-shot EfficientNet-B3, yet EfficientNet-B3 still classifies better.
+\end{enumerate}
+
+The study also has two important limitations. The first is architectural: the final repository substituted EfficientNet-B3 for the originally planned ResNet-18, so the conclusions are about ``CNN versus ViT'' in a broader sense, not specifically about ResNet-18. The second is procedural: the Phase~4 supervised, embedding-analysis, and ensemble follow-up steps are tied to the \texttt{advanced} augmentation lineage rather than to a dynamically selected best Phase~3 lineage.
+
+The most useful next steps are therefore concrete. Reintroducing a true ResNet-18 baseline would restore full consistency with the original plan. Expanding the augmentation space beyond the current CutMix-centric \texttt{advanced} and \texttt{combined} variants would test whether the transformer benefits even more from architecture-specific regularization. Finally, repeating the Phase~4 supervised and downstream ensemble steps with the empirically best Phase~3 lineage, rather than with the fixed \texttt{advanced} lineage, would clarify whether the current full-data reference is merely good or truly optimal within this repository.
 
 \section{Application Instructions}
-% Explain how to run the application and reproduce the results.
-% Include environment requirements, installation steps, commands, configuration,
-% input/output description, and any reproducibility notes.
+\label{sec:application}
+
+The repository is operated entirely through command-line entrypoints and YAML configs. Reproduction therefore consists of recreating the environment, placing \emph{CINIC-10} in the expected directory layout, rerunning the phase-specific configs for the planned seed set $\{13, 37, 73\}$, and aggregating the resulting seed directories.
+
+\subsection{Environment and data}
+\label{subsec:environment}
+
+Installation:
+
+\begin{verbatim}
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .[dev]
+\end{verbatim}
+
+The dataset must be available under:
+
+\begin{verbatim}
+data/cinic10/
+  train/
+  valid/
+  test/
+\end{verbatim}
+
+with standard \texttt{ImageFolder} class subdirectories in each split.
+
+\subsection{CLI pattern}
+\label{subsec:cli-pattern}
+
+Every job follows the same template:
+
+\begin{verbatim}
+python -m archdyn.cli.<command> --config <path-to-yaml> --seed <seed>
+\end{verbatim}
+
+The main commands are:
+
+\begin{itemize}[nosep]
+    \item \texttt{train} for standard supervised runs,
+    \item \texttt{search} for Phase~2 hyperparameter search,
+    \item \texttt{fewshot} for Protonet training,
+    \item \texttt{fewshot\_eval} for the additional $10$-way episodic evaluation,
+    \item \texttt{fewshot\_prototype\_eval} for the fixed-prototype closed-set evaluation,
+    \item \texttt{analyze\_embeddings} for post-hoc embedding extraction,
+    \item \texttt{ensemble} for soft voting via logits averaging, stacking via feature concatenation with logistic regression, and Protonet linear probes,
+    \item \texttt{aggregate} for mean/std summaries across finished seeds.
+\end{itemize}
+
+\subsection{Minimal reproduction workflow}
+\label{subsec:reproduction}
+
+The README provides the full command list and instructions to reproduce results under \textit{End-to-end experiments} section.
+
+\begin{enumerate}[nosep]
+    \item Run all Phase~1 configs from \texttt{configs/phase1/} for seeds~13, 37, and~73, then aggregate \texttt{outputs/phase1/}.
+    \item Run the two Phase~2 search configs from \texttt{configs/phase2/}, aggregate the search outputs, and propagate the winning hyperparameters into the later YAMLs.
+    \item Run all eight Phase~3 configs from \texttt{configs/phase3/}, then aggregate \texttt{outputs/phase3/}.
+    \item Run all eight Protonet configs from \texttt{configs/phase4/}, then run the extra \texttt{fewshot\_eval} and \texttt{fewshot\_prototype\_eval} steps for each saved checkpoint.
+    \item Run the four Phase~4 supervised comparison configs and aggregate \texttt{outputs/phase4/}.
+    \item Run the four embedding-analysis configs from \texttt{configs/analysis/}.
+    \item Run the three ensemble configs from \texttt{configs/ensembles/} and aggregate \texttt{outputs/ensembles/}.
+\end{enumerate}
+
+
+\subsection{Where to inspect results}
+\label{subsec:outputs}
+
+All artifacts are written under:
+
+\begin{verbatim}
+outputs/<phase>/<experiment_name>/seed_<seed>/
+\end{verbatim}
+
+The most important files are:
+
+\begin{itemize}[nosep]
+    \item \texttt{test\_metrics.json} for supervised and training-time few-shot metrics,
+    \item \texttt{aggregate/metrics\_mean\_std.json} for multi-seed summaries,
+    \item \texttt{aggregate/search\_results\_aggregated.csv} and \texttt{best\_search\_result.json} for Phase~2 search analysis,
+    \item \texttt{episodic\_eval\_test\_nway\_10.json} and \texttt{prototype\_eval\_train64\_test.json} for the two closed-set Protonet follow-ups,
+    \item \texttt{test\_embedding\_metrics.csv}, \texttt{test\_metrics.json}, and the \texttt{plots/} directory for embedding analysis,
+    \item \texttt{soft\_voting\_metrics.json}, \texttt{stacking\_metrics.json}, and \\ \texttt{protonet\_logreg\_metrics.json} for the ensemble phase.
+\end{itemize}
+
+
+\appendix
+
+\section{Embedding-Space Visualisations}
+\label{sec:appendix-plots}
+
+All figures in this appendix use seed~13 embeddings extracted from $100$ sampled images per class on the indicated split. Each $2 \times 2$ grid places DeiT-Tiny on~the left and EfficientNet-B3 on~the right, with the few-shot regime on~top and the full-data supervised regime on~the bottom.
+
+\begin{figure}[h!]
+\centering
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{../../outputs/analysis/embeddings_deit_tiny/seed_13/plots/train_tsne.png}
+  \caption{DeiT-Tiny, few-shot}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{../../outputs/analysis/embeddings_efficientnet_b3/seed_13/plots/train_tsne.png}
+  \caption{EfficientNet-B3, few-shot}
+\end{subfigure}
+\\[6pt]
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{../../outputs/analysis/embeddings_deit_tiny_supervised/seed_13/plots/train_tsne.png}
+  \caption{DeiT-Tiny, supervised}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{../../outputs/analysis/embeddings_efficientnet_b3_supervised/seed_13/plots/train_tsne.png}
+  \caption{EfficientNet-B3, supervised}
+\end{subfigure}
+\caption{t-SNE projections of train-split embeddings (seed~13, $100$ images per class)}
+\label{fig:tsne-train}
+\end{figure}
+
+\begin{figure}[h!]
+\centering
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{../../outputs/analysis/embeddings_deit_tiny/seed_13/plots/test_tsne.png}
+  \caption{DeiT-Tiny, few-shot}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{../../outputs/analysis/embeddings_efficientnet_b3/seed_13/plots/test_tsne.png}
+  \caption{EfficientNet-B3, few-shot}
+\end{subfigure}
+\\[6pt]
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{../../outputs/analysis/embeddings_deit_tiny_supervised/seed_13/plots/test_tsne.png}
+  \caption{DeiT-Tiny, supervised}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{../../outputs/analysis/embeddings_efficientnet_b3_supervised/seed_13/plots/test_tsne.png}
+  \caption{EfficientNet-B3, supervised}
+\end{subfigure}
+\caption{t-SNE projections of test-split embeddings (seed~13, $100$ images per class)}
+\label{fig:tsne-test}
+\end{figure}
+
+\begin{figure}[h!]
+\centering
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{../../outputs/analysis/embeddings_deit_tiny/seed_13/plots/train_pca.png}
+  \caption{DeiT-Tiny, few-shot}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{../../outputs/analysis/embeddings_efficientnet_b3/seed_13/plots/train_pca.png}
+  \caption{EfficientNet-B3, few-shot}
+\end{subfigure}
+\\[6pt]
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{../../outputs/analysis/embeddings_deit_tiny_supervised/seed_13/plots/train_pca.png}
+  \caption{DeiT-Tiny, supervised}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{../../outputs/analysis/embeddings_efficientnet_b3_supervised/seed_13/plots/train_pca.png}
+  \caption{EfficientNet-B3, supervised}
+\end{subfigure}
+\caption{PCA projections of train-split embeddings (seed~13, $100$ images per class)}
+\label{fig:pca-train}
+\end{figure}
+
+\begin{figure}[h!]
+\centering
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{../../outputs/analysis/embeddings_deit_tiny/seed_13/plots/test_pca.png}
+  \caption{DeiT-Tiny, few-shot}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{../../outputs/analysis/embeddings_efficientnet_b3/seed_13/plots/test_pca.png}
+  \caption{EfficientNet-B3, few-shot}
+\end{subfigure}
+\\[6pt]
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{../../outputs/analysis/embeddings_deit_tiny_supervised/seed_13/plots/test_pca.png}
+  \caption{DeiT-Tiny, supervised}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{../../outputs/analysis/embeddings_efficientnet_b3_supervised/seed_13/plots/test_pca.png}
+  \caption{EfficientNet-B3, supervised}
+\end{subfigure}
+\caption{PCA projections of test-split embeddings (seed~13, $100$ images per class)}
+\label{fig:pca-test}
+\end{figure}
+
+\begin{figure}[h!]
+\centering
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{../../outputs/analysis/embeddings_deit_tiny/seed_13/plots/train_centroid_heatmap.png}
+  \caption{DeiT-Tiny, few-shot}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{../../outputs/analysis/embeddings_efficientnet_b3/seed_13/plots/train_centroid_heatmap.png}
+  \caption{EfficientNet-B3, few-shot}
+\end{subfigure}
+\\[6pt]
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{../../outputs/analysis/embeddings_deit_tiny_supervised/seed_13/plots/train_centroid_heatmap.png}
+  \caption{DeiT-Tiny, supervised}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{../../outputs/analysis/embeddings_efficientnet_b3_supervised/seed_13/plots/train_centroid_heatmap.png}
+  \caption{EfficientNet-B3, supervised}
+\end{subfigure}
+\caption{Centroid distance heatmaps for train-split embeddings (seed~13, $100$ images per class)}
+\label{fig:heatmap-train}
+\end{figure}
+
+\begin{figure}[h!]
+\centering
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{../../outputs/analysis/embeddings_deit_tiny/seed_13/plots/test_centroid_heatmap.png}
+  \caption{DeiT-Tiny, few-shot}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{../../outputs/analysis/embeddings_efficientnet_b3/seed_13/plots/test_centroid_heatmap.png}
+  \caption{EfficientNet-B3, few-shot}
+\end{subfigure}
+\\[6pt]
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{../../outputs/analysis/embeddings_deit_tiny_supervised/seed_13/plots/test_centroid_heatmap.png}
+  \caption{DeiT-Tiny, supervised}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{../../outputs/analysis/embeddings_efficientnet_b3_supervised/seed_13/plots/test_centroid_heatmap.png}
+  \caption{EfficientNet-B3, supervised}
+\end{subfigure}
+\caption{Centroid distance heatmaps for test-split embeddings (seed~13, $100$ images per class)}
+\label{fig:heatmap-test}
+\end{figure}
+
+\end{document}
